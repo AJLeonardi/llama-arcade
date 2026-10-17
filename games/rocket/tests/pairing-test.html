@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Pairing test</title>
+  <style>body { font: 14px system-ui; background: #111; color: #eee; } iframe { width: 480px; height: 300px; border: 1px solid #555; }</style>
+</head>
+<body>
+  <!-- Dev tool: runs two copies of the game and swaps their QR codes in code (like two devices scanning each other).
+       Run `npm run dev` and open /games/rocket/tests/pairing-test.html. Needs a browser that allows WebRTC. -->
+  <iframe id="a" src="../index.html"></iframe>
+  <iframe id="b" src="../index.html"></iframe>
+  <pre id="out">running...</pre>
+  <script>
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const loaded = f => new Promise(r => f.addEventListener('load', r));
+    (async () => {
+      const out = document.getElementById('out'), log = [];
+      try {
+        const fa = document.getElementById('a'), fb = document.getElementById('b');
+        await Promise.all([loaded(fa), loaded(fb)]);
+        const A = { Net: fa.contentWindow.__rocket.Net }, B = { Net: fb.contentWindow.__rocket.Net };  // the game exposes these for tests
+        const [codeA, codeB] = await Promise.all([A.Net.prepare(), B.Net.prepare()]);
+        log.push(`code sizes ${codeA.length}/${codeB.length}`);
+        // both "cameras" see the other screen at the same time
+        const [ansA, ansB] = await Promise.all([A.Net.handleCode(codeB), B.Net.handleCode(codeA)]);
+        const guest = ansA ? 'A' : 'B';
+        log.push(`guest is ${guest}`);
+        // the host's camera now sees the guest's answer (and its own reflection should be ignored)
+        if (ansA) await B.Net.handleCode(ansA); else await A.Net.handleCode(ansB);
+        await (ansA ? A : B).Net.handleCode(ansA || ansB);  // the guest sees its own answer reflected: ignored
+        for (let i = 0; i < 40 && !(A.Net.connected && B.Net.connected); i++) await wait(200);
+        log.push(`connected A=${A.Net.connected} (${A.Net.role}) B=${B.Net.connected} (${B.Net.role})`);
+        await wait(1800);
+        log.push(`seeds match=${A.Net.seed === B.Net.seed}`);
+        log.push(`A sees B in "${A.Net.friend && A.Net.friend.scene}", B sees A in "${B.Net.friend && B.Net.friend.scene}"`);
+        const paired = A.Net.connected && B.Net.connected && A.Net.seed === B.Net.seed;
+        log.push(paired ? 'PASS pairing' : 'FAIL pairing');
+
+        // ---- playing together ----
+        const run = (win, code) => win.contentWindow.eval(`with (__rocket) { ${code} }`);
+        const both = code => [run(fa, code), run(fb, code)];
+        both("game.players = 1; goTo('house', {})");
+        await wait(1200);
+        const seen = both("Net.friend && Net.friend.scene === 'house' && Net.friend.x != null");
+        log.push(`see each other in the house: ${seen}`);
+        // different engines, so different speeds: flying together should use the slower one
+        run(fa, "game.save.design = {cells:{'3,2':'nose','3,3':'cockpit','3,4':'body','2,4':'wing','4,4':'wing','3,5':'engine1'},color:0}; game.save.visited = []");
+        run(fb, "game.save.design = {cells:{'3,2':'nose','3,3':'cockpit','3,4':'body','2,4':'wing','4,4':'wing','3,5':'engine2'},color:1}; game.save.visited = []");
+        both("goTo('builder')"); await wait(1700);   // let each side send its new design
+        run(fa, 'startFlight(0)'); await wait(600);
+        const aWaiting = run(fa, "!!(game.modal && game.modal.isWait) && game.sceneName === 'builder'");
+        run(fb, 'startFlight(0)'); await wait(600);
+        const launched = both("game.sceneName === 'launch' && Coop.together");
+        log.push(`A waited: ${aWaiting}, both took off together: ${launched}`);
+        for (let i = 0; i < 40 && !both("game.sceneName === 'space'").every(Boolean); i++) await wait(300);
+        await wait(2500);
+        const speeds = both('Space.speed'), dists = both('Math.round(Space.dist)');
+        log.push(`in space: speeds ${speeds.join('/')}, distances ${dists.join('/')}`);
+        const sideBySide = speeds[0] === speeds[1] && Math.abs(dists[0] - dists[1]) < 120;
+        // planet prompt: the first answer waits for the second
+        const first = run(fa, "Coop.answer(Space.leg, 'land')"); await wait(400);
+        const second = run(fb, "Coop.answer(Space.leg, 'land')"); await wait(400);
+        const firstAgain = run(fa, "Coop.answer(Space.leg, 'land')");
+        log.push(`planet answers: A=${first}->${firstAgain}, B=${second}`);
+        const coopOk = seen.every(Boolean) && aWaiting && launched.every(Boolean) && sideBySide && first === 'wait' && second === 'land' && firstAgain === 'land';
+        log.push(coopOk ? 'PASS together' : 'FAIL together');
+        log.push(paired && coopOk ? 'PASS' : 'FAIL');
+      } catch (e) { log.push('ERROR ' + e.message); }
+      out.textContent = log.join('\n');
+      document.title = 'DONE';
+    })();
+  </script>
+</body>
+</html>

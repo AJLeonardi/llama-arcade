@@ -1,0 +1,30 @@
+{
+  "name": "llama-arcade",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "smoke": "node scripts/smoke.mjs",
+    "check": "npm test && npm run build && npm run smoke",
+    "icons": "node scripts/make-icons.mjs"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.3",
+    "jsqr": "^1.4.0",
+    "qrcode-generator": "^2.0.4",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "@types/three": "^0.170.0",
+    "playwright": "^1.48.2",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}

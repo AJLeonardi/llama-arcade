@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="theme-color" content="#070917">
+  <meta name="apple-mobile-web-app-title" content="Llama Rocket">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icon-180.png">
+  <link rel="icon" type="image/png" href="./icon-192.png">
+  <title>Llama Rocket Builder</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #070917; overflow: hidden; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+    body { display: flex; align-items: center; justify-content: center; font-family: "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif; }
+    canvas { display: block; border-radius: 14px; touch-action: none; }
+    #pair { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; z-index: 10; }
+    #pair[hidden] { display: none; }
+    .pair-box { position: relative; background: #141834; color: #fff; border: 4px solid #ffbf1f; border-radius: 18px;
+      padding: 14px 18px; width: min(760px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; text-align: center; box-sizing: border-box; }
+    .pair-row { display: flex; gap: 14px; justify-content: center; align-items: flex-start; }
+    .pair-cell { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; color: #aab4d4; font-size: 14px; }
+    .pair-tip { font-size: 14px !important; color: #aab4d4; margin: 8px 0 0 !important; }
+    .pair-box h2 { margin: 4px 0 8px; color: #ffe066; }
+    .pair-box p { margin: 0 0 12px; font-size: 17px; line-height: 1.35; }
+    .pair-box button { font: inherit; font-size: 18px; border: 0; border-radius: 12px; padding: 12px 16px; margin: 6px; background: #ffbf1f; color: #2a1800; cursor: pointer; }
+    .pair-box .pair-x { position: absolute; top: 8px; right: 8px; margin: 0; padding: 6px 12px; background: #ff6b6b; color: #fff; }
+    .pair-qr, .pair-cam { width: min(100%, 340px, 52vh); height: auto; aspect-ratio: 1; object-fit: cover; border-radius: 10px; display: block; }
+    .pair-qr { background: #fff; object-fit: contain; }
+    .pair-cam { background: #000; transform: scaleX(-1); }
+    [hidden] { display: none !important; }
+    html, body { touch-action: manipulation; }
+    #rotate { display: none; position: fixed; inset: 0; z-index: 20; background: #070917; color: #ffe066;
+      font-size: 30px; line-height: 1.5; text-align: center; align-items: center; justify-content: center; padding: 24px; }
+    @media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
+    #update { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 15; font: inherit; font-size: 20px;
+      padding: 12px 22px; border: 3px solid #2a1800; border-radius: 16px; background: #ffe066; color: #2a1800; box-shadow: 0 4px 20px rgba(0,0,0,.5); }
+    .pair-manual { margin-top: 10px; text-align: left; font-size: 14px; color: #aab4d4; }
+    .pair-manual textarea { width: 100%; box-sizing: border-box; font-size: 11px; margin-top: 6px; -webkit-user-select: text; user-select: text; }
+  </style>
+</head>
+<body>
+  <canvas id="game" aria-label="Llama Rocket Builder game"></canvas>
+  <div id="rotate">📱🔄<br>Turn your phone sideways to play!</div>
+  <button id="update" hidden>✨ New version! Tap to get it</button>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
