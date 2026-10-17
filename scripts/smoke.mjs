@@ -20,6 +20,13 @@ const base = server.resolvedUrls.local[0];
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 let failed = 0;
 
+// The build must fill in the service worker's cache name, or devices never refresh their offline copy.
+const sw = await (await fetch(base + 'sw.js')).text();
+if (sw.includes('__BUILD__')) {
+  console.log('✗ sw.js still has the __BUILD__ placeholder');
+  failed++;
+}
+
 for (const p of pages) {
   const page = await browser.newPage({ viewport: { width: 1180, height: 820 } });
   const problems = [];
