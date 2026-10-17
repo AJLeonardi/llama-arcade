@@ -35,7 +35,7 @@ function deployFiles(): Plugin {
     name: 'deploy-files',
     generateBundle() {
       this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: BUILD }) });
-      const sw = readFileSync(resolve(root, 'shared/sw.js'), 'utf8').replaceAll('__BUILD__', BUILD);
+      const sw = readFileSync(resolve(root, 'shared/sw.js'), 'utf8').replace(/__BUILD__/g, BUILD);
       this.emitFile({ type: 'asset', fileName: 'sw.js', source: sw });
     },
   };
