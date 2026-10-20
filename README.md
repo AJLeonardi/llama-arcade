@@ -8,6 +8,7 @@ All our llama games in one place. Open the arcade, pick a game, play.
 |---|---|
 | [Llama Drive](games/drive/README.md) | Open-world driving and crashing (3D) |
 | [Llama Rocket Builder](games/rocket/README.md) | Build a rocket and fly to Planet Evil (2D) |
+| [Llama-blox](games/blox/README.md) | Roblox-style blocky world: obbies, coins and dress-up (3D) |
 
 ## On the iPad / iPhone
 

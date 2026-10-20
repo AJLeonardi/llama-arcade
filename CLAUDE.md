@@ -11,8 +11,9 @@ one deploy (GitHub Pages).
 
 - **To make a new game, use the `/new-game` skill** (`.claude/skills/new-game/SKILL.md`). It has the
   rules every game follows.
-- **Each game has its own `CLAUDE.md`** (`games/drive/CLAUDE.md`, `games/rocket/CLAUDE.md`). When working
-  on one game, read only that game's folder (plus `shared/` if it uses something from there).
+- **Each game has its own `CLAUDE.md`** (`games/drive/CLAUDE.md`, `games/rocket/CLAUDE.md`,
+  `games/blox/CLAUDE.md`). When working on one game, read only that game's folder (plus `shared/` if it
+  uses something from there).
 
 ## Commands
 

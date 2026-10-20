@@ -1,0 +1,44 @@
+# CLAUDE.md: Llama-blox
+
+A Roblox-style 3D blocky world (three.js, TypeScript, no physics engine). How to play is in `README.md`.
+Run commands from the repo root (see the root `CLAUDE.md`); this game's tests: `npx vitest run games/blox`.
+
+## Code map
+
+- `src/sim/`: plain data and rules, **no three.js or DOM**, so it all runs in the Node tests.
+  - `types.ts`: `Block` (a box with a `kind`: solid, lava, bounce, speed, checkpoint, finish, conveyor,
+    vanish, portal, shop; optional `move`, `push`, `level`, `deco`) and `Level`.
+  - `physics.ts`: `Sim`, the player in a world of boxes. Fixed 60 Hz `step(input)` returns events (`coin`,
+    `oops`, `finish`, `portal`…). Collisions are AABB, resolved one axis at a time (y, then x, then z), with
+    step-up onto low ledges, coyote time, jump buffering, moving platforms that carry you, and vanish timers.
+    Tuning constants (`WALK`, `JUMP`, `GRAVITY`, `BOUNCE`…) are at the top.
+  - `course.ts`: `Course`, a cursor for laying out obbies along +z (`add({ gap, rise, side, kind… })`); it
+    records the main `path` for the tests.
+  - `levels.ts`: the hub (Llama Island: portals, shop, trees, trampoline) and the obbies. `LEVELS`, `OBBY_IDS`.
+  - `shop.ts`: the outfit catalogue (`ITEMS`), `Save` (coins, owned, outfit, done), `fixSave`, `pick` (buy/wear).
+- `src/view/`: three.js.
+  - `boxes.ts`: `BoxBatch` merges many boxes into one geometry with vertex colours and world-sized UVs.
+  - `world.ts`: `WorldView` builds a level. Static blocks are merged per look (tile, lava, bounce, speed,
+    finish); moving/vanish blocks and belts are their own meshes; coins are one InstancedMesh. `update()`
+    syncs them with the `Sim` each frame.
+  - `avatar.ts`: `buildAvatar(outfit)` (llama or person, hat/glasses/cape) and `animate()`. Rebuilt on change.
+  - `textures.ts`: every texture drawn on canvas. `confetti.ts`: the finish burst.
+- `src/ui/`: `ui.ts` (HUD, menus, shop panel; DOM only written on change), `controls.ts` (floating touch
+  joystick on the left 45%, look-drag elsewhere, jump button, keyboard), `sfx.ts` (WebAudio beeps),
+  `style.css`.
+- `src/main.ts`: renderer, sky, lights, the mode machine (`title`, `play`, `pause`, `shop`, `finish`), the
+  loop (fixed-step sim + interpolated player), the follow camera and saving (`gameStorage('blox')`, key `save`).
+  `window.__blox` exposes `sim`, `save`, `LEVELS` and `goTo(levelId)` for poking from the console.
+
+## Making levels
+
+- Use `Course` so new jumps are checked: `tests/levels.test.ts` has a robot that plays each obby with the
+  real physics and must reach the finish with at most 2 slips. Add new obby ids to `OBBIES` in `levels.ts`.
+- Rules of thumb learned so far: a flat running jump reaches ~5 units edge to edge (`MAX_GAP`); keep lava
+  stripes at least ~7 apart so landing from one jump doesn't put you on the next; and a bounce pad's
+  target platform must be at least ~3.5 away, or you bonk your head on its underside on the way up.
+- Special blocks always use the same colours (`course.ts:KIND_COLOR`) so kids learn what they do.
+
+## Ideas for later
+
+More obbies, pets that follow you, a build mode (place blocks), playing together over QR pairing.
