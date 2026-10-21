@@ -13,7 +13,11 @@ export type Kind =
   | 'conveyor' // moves you along `push` while you stand on it
   | 'vanish' // fades away soon after you step on it, then comes back
   | 'portal' // walk-through door to an obby (`level`); not solid
-  | 'shop'; // walk-through spot that opens the dress-up shop; not solid
+  | 'shop' // walk-through spot that opens the dress-up shop; not solid
+  | 'door' // solid until you have its `key`, then it slides open
+  | 'crawl' // walk-through: inside it you crawl (half height), for air vents
+  | 'spot' // searchlight: walk-through, but being in it sends you back to the last checkpoint
+  | 'zone'; // invisible walk-through area with a `tag`, for a world's own stations (rides, grills...)
 
 export interface Block {
   /** Centre of the box. */
@@ -32,6 +36,12 @@ export interface Block {
   push?: [number, number];
   /** Portal target. */
   level?: string;
+  /** Doors: the key that opens them. */
+  key?: string;
+  /** Zones: what they're for (read by the world's activity). */
+  tag?: string;
+  /** Drawn as a see-through grate (vent roofs), so the camera can see you underneath. */
+  see?: boolean;
   /** Just for looks (trees, flowers, signs): drawn but never touched. */
   deco?: boolean;
 }
@@ -54,4 +64,10 @@ export interface Level {
   sky: [string, string];
   /** An obby's main path, platform by platform (for the tests). */
   path?: Block[];
+  /** Keys to pick up (they open doors with the same id). */
+  keys?: { at: V3; id: string; color: string }[];
+  /** Floating name signs. */
+  signs?: { at: V3; text: string; color: string; size?: number }[];
+  /** Waypoints a robot can walk through to the finish (for the tests); `wait` = wait here until the way is clear. */
+  route?: { to: V3; wait?: boolean }[];
 }

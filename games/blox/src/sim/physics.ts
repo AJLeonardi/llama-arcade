@@ -12,6 +12,8 @@ export const GRAVITY = 32;
 export const JUMP = 12; // jump take-off speed: ~2.25 high, ~5 far at WALK
 export const BOUNCE = 21; // trampoline take-off speed: ~6.9 high
 export const STEP_UP = 0.55; // ledges this low are walked up without jumping
+export const CRAWL_H = 0.9; // player height while crawling through a vent
+const CRAWL_SPEED = 4.5;
 const COYOTE = 0.12; // can still jump this long after running off an edge (s)
 const JUMP_BUFFER = 0.15; // a jump pressed this long before landing still happens (s)
 const VANISH_DELAY = 0.7; // a vanish block stays this long after you touch it (s)
@@ -30,7 +32,11 @@ export type SimEvent =
   | { type: 'oops' }
   | { type: 'finish' }
   | { type: 'portal'; level: string }
-  | { type: 'shop' };
+  | { type: 'shop' }
+  | { type: 'key'; id: string }
+  | { type: 'door' }
+  | { type: 'locked'; key: string }
+  | { type: 'spotted' };
 
 export interface Input {
   /** Wanted run direction in world x/z, length 0..1. */
@@ -48,7 +54,8 @@ export function blockOffset(b: Block, t: number): V3 {
   return [dx * s, dy * s, dz * s];
 }
 
-const isSolid = (b: Block) => !b.deco && b.kind !== 'portal' && b.kind !== 'shop';
+const TRIGGERS = new Set(['portal', 'shop', 'crawl', 'spot', 'zone']);
+const isSolid = (b: Block) => !b.deco && !TRIGGERS.has(b.kind);
 
 export class Sim {
   readonly level: Level;
@@ -64,6 +71,14 @@ export class Sim {
   fastTime = 0;
   finished = false;
   readonly coinTaken: boolean[];
+  readonly keyTaken: boolean[];
+  /** Keys we're carrying, and doors (block indexes) we've opened. */
+  readonly keys = new Set<string>();
+  readonly opened = new Set<number>();
+  /** Current height of the player's box: HEIGHT, or CRAWL_H in a vent. */
+  height = HEIGHT;
+  /** Tags of the zones we're standing in. */
+  zones: string[] = [];
   /** Current centre of each block (moving blocks move). */
   readonly at: V3[];
   /** Vanish blocks: seconds since touched (-1 = untouched). */
@@ -73,6 +88,7 @@ export class Sim {
   /** Trigger blocks we're inside, so portals/shop fire once on the way in. */
   private inside = new Set<number>();
   private touchedCheckpoint = -1;
+  private lockedDoor = -1;
 
   constructor(level: Level) {
     this.level = level;
@@ -80,6 +96,7 @@ export class Sim {
     this.checkpoint = [...level.spawn];
     this.yaw = level.spawnYaw;
     this.coinTaken = level.coins.map(() => false);
+    this.keyTaken = (level.keys ?? []).map(() => false);
     this.at = level.blocks.map((b) => [b.x, b.y, b.z]);
     this.vanishT = level.blocks.map(() => -1);
     // Don't fire the portal/shop you might be standing in at the start.
@@ -107,7 +124,12 @@ export class Sim {
     this.onGround = false;
     this.ground = -1;
     this.fastTime = 0;
+    this.height = HEIGHT;
     this.vanishT.fill(-1);
+  }
+
+  get crawling() {
+    return this.height < HEIGHT;
   }
 
   step(input: Input, dt = STEP): SimEvent[] {
@@ -142,9 +164,16 @@ export class Sim {
       this.ground = -1;
     }
 
-    // 3. Running: ease towards the wanted speed (quick on the ground, a bit slower in the air).
+    // 3. Crawl in vents; stand up again once there's room.
+    if (this.level.blocks.some((b, i) => b.kind === 'crawl' && this.overlaps(i))) this.height = CRAWL_H;
+    else if (this.crawling) {
+      const up: V3 = [...this.pos];
+      if (!this.level.blocks.some((_, i) => this.solidAt(i) && this.overlaps(i, 0, up, HEIGHT))) this.height = HEIGHT;
+    }
+
+    // Running: ease towards the wanted speed (quick on the ground, a bit slower in the air).
     this.fastTime = Math.max(0, this.fastTime - dt);
-    const speed = this.fastTime > 0 ? FAST : WALK;
+    const speed = this.crawling ? CRAWL_SPEED : this.fastTime > 0 ? FAST : WALK;
     const len = Math.hypot(input.moveX, input.moveZ);
     const mx = len > 1 ? input.moveX / len : input.moveX;
     const mz = len > 1 ? input.moveZ / len : input.moveZ;
@@ -214,9 +243,30 @@ export class Sim {
       this.respawn();
       ev.push({ type: 'oops' });
     }
+    // Searchlights: if one finds you, back you go.
+    if (L.blocks.some((b, i) => b.kind === 'spot' && this.overlaps(i))) {
+      this.respawn();
+      ev.push({ type: 'spotted' });
+    }
+
+    // Doors open when you bump into them with the right key.
+    let bumped = -1;
+    L.blocks.forEach((b, i) => {
+      if (b.kind !== 'door' || !this.solidAt(i) || !this.overlaps(i, 0.08)) return;
+      if (b.key && this.keys.has(b.key)) {
+        this.opened.add(i);
+        ev.push({ type: 'door' });
+      } else {
+        bumped = i;
+        if (this.lockedDoor !== i) ev.push({ type: 'locked', key: b.key ?? '' });
+      }
+    });
+    this.lockedDoor = bumped;
 
     // 9. Walk-through triggers.
     const here = this.triggersHere();
+    this.zones = [];
+    for (const i of here) if (L.blocks[i].kind === 'zone') this.zones.push(L.blocks[i].tag ?? '');
     for (const i of here) {
       if (this.inside.has(i)) continue;
       const b = L.blocks[i];
@@ -226,11 +276,19 @@ export class Sim {
     this.inside = new Set(here);
 
     // 10. Coins.
-    const cy = this.pos[1] + HEIGHT / 2;
+    const cy = this.pos[1] + this.height / 2;
+    const near = (c: V3) => Math.hypot(c[0] - this.pos[0], c[1] - cy, c[2] - this.pos[2]) < 1.2;
     L.coins.forEach((c, i) => {
-      if (!this.coinTaken[i] && Math.hypot(c[0] - this.pos[0], c[1] - cy, c[2] - this.pos[2]) < 1.2) {
+      if (!this.coinTaken[i] && near(c)) {
         this.coinTaken[i] = true;
         ev.push({ type: 'coin', index: i });
+      }
+    });
+    L.keys?.forEach((k, i) => {
+      if (!this.keyTaken[i] && near(k.at)) {
+        this.keyTaken[i] = true;
+        this.keys.add(k.id);
+        ev.push({ type: 'key', id: k.id });
       }
     });
     return ev;
@@ -239,19 +297,24 @@ export class Sim {
   // ---- collision helpers ----
 
   /** Does the player's box (grown by `grow`) overlap block i? */
-  private overlaps(i: number, grow = 0, pos: V3 = this.pos) {
+  private overlaps(i: number, grow = 0, pos: V3 = this.pos, height = this.height) {
     const b = this.level.blocks[i];
     const c = this.at[i];
     return (
       Math.abs(pos[0] - c[0]) < HALF_W + b.w / 2 + grow &&
       Math.abs(pos[2] - c[2]) < HALF_W + b.d / 2 + grow &&
       pos[1] - grow < c[1] + b.h / 2 &&
-      pos[1] + HEIGHT + grow > c[1] - b.h / 2
+      pos[1] + height + grow > c[1] - b.h / 2
     );
   }
 
+  /** Does block i block the camera's view? (Solid walls, but not see-through grates.) */
+  blocksView(i: number) {
+    return this.solidAt(i) && !this.level.blocks[i].see;
+  }
+
   private solidAt(i: number) {
-    return isSolid(this.level.blocks[i]) && this.present(i);
+    return isSolid(this.level.blocks[i]) && this.present(i) && !this.opened.has(i);
   }
 
   private touching(test: (b: Block) => boolean, grow: number) {
@@ -261,7 +324,7 @@ export class Sim {
   private triggersHere() {
     const out: number[] = [];
     this.level.blocks.forEach((b, i) => {
-      if ((b.kind === 'portal' || b.kind === 'shop') && this.overlaps(i)) out.push(i);
+      if ((b.kind === 'portal' || b.kind === 'shop' || b.kind === 'zone') && this.overlaps(i)) out.push(i);
     });
     return out;
   }
@@ -278,7 +341,7 @@ export class Sim {
         this.onGround = true;
         this.ground = i;
       } else {
-        this.pos[1] = c[1] - b.h / 2 - HEIGHT;
+        this.pos[1] = c[1] - b.h / 2 - this.height;
         this.vel[1] = Math.min(0, this.vel[1]);
       }
     }

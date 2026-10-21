@@ -30,6 +30,9 @@ export class UI {
   private levelName = el('div', 'pill level-name');
   private shopBtn = el('button', 'shop-btn', '👕');
   private hint = el('div', 'hint');
+  private actionsEl = el('div', 'actions');
+  private actionKey = '';
+  private actionList: { label: string; run: () => void; color?: string }[] = [];
   private screen = el('div', 'screen hidden');
   private shopEl = el('div', 'shop hidden');
   private toastEl = el('div', 'toast');
@@ -48,7 +51,14 @@ export class UI {
       handlers.shop();
     });
     this.updateBtn.addEventListener('click', handlers.update);
-    this.hud.append(this.coins, this.levelName, this.shopBtn, pause, this.jumpBtn, this.hint);
+    this.hud.append(this.coins, this.levelName, this.shopBtn, pause, this.jumpBtn, this.hint, this.actionsEl);
+    // Enter or F presses the first context button.
+    window.addEventListener('keydown', (e) => {
+      if ((e.code === 'Enter' || e.code === 'KeyF') && !e.repeat && this.actionList[0] && !this.hud.classList.contains('hidden')) {
+        sfx.click();
+        this.actionList[0].run();
+      }
+    });
     this.toastEl.style.opacity = '0';
     this.cardEl.style.opacity = '0';
     this.root.append(this.hud, this.cardEl, this.toastEl, this.screen, this.shopEl, this.fadeEl, this.updateBtn, el('div', 'build', `build ${BUILD}`));
@@ -64,6 +74,36 @@ export class UI {
   /** On touch screens the hint goes once they've found out how to look around. */
   lookedAround() {
     if (this.touch) this.hint.classList.add('hidden');
+  }
+
+  /** The big context buttons ("🎢 Ride!"), redrawn only when they change. */
+  setActions(list: { label: string; run: () => void; color?: string }[]) {
+    this.actionList = list;
+    const key = list.map((a) => a.label + (a.color ?? '')).join('|');
+    if (key === this.actionKey) return;
+    this.actionKey = key;
+    this.actionsEl.replaceChildren(
+      ...list.map((a, i) => {
+        const b = button('action-btn', a.label, () => this.actionList[i]?.run());
+        if (a.color) b.style.background = a.color;
+        return b;
+      }),
+    );
+  }
+
+  /** While riding or building there's nothing to jump: hide the jump button and the hint. */
+  setLocked(on: boolean) {
+    this.hud.classList.toggle('locked', on);
+  }
+
+  /** A message card with buttons (for the worlds' own results). */
+  card(title: string, lines: string[], buttons: [string, string, () => void][]) {
+    const card = el('div', 'card');
+    card.append(el('h1', '', title), ...lines.map((l) => el('p', '', l)));
+    const row = el('div', 'card-buttons');
+    for (const [label, cls, fn] of buttons) row.append(button(`big ${cls}`, label, fn));
+    card.append(row);
+    this.showScreen([card]);
   }
 
   setCoins(n: number) {

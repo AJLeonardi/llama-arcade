@@ -120,6 +120,36 @@ export const lavaTex = () =>
     }),
   );
 
+/** Vent roofs: a metal grate with holes (drawn with alphaTest, so you can see through). */
+export const grateTex = () =>
+  once('grate', () =>
+    canvasTexture(64, (g, s) => {
+      g.clearRect(0, 0, s, s);
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, s, 10);
+      g.fillRect(0, 0, 10, s);
+      g.fillRect(0, s / 2 - 3, s, 6);
+      g.fillRect(s / 2 - 3, 0, 6, s);
+    }),
+  );
+
+/** Locked doors: panels with a big keyhole (tinted by the key's colour). */
+export const doorTex = () =>
+  once('door', () =>
+    canvasTexture(64, (g, s) => {
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, s, s);
+      g.strokeStyle = 'rgba(0,0,0,0.25)';
+      g.lineWidth = 4;
+      g.strokeRect(6, 6, s - 12, s - 12);
+      g.fillStyle = 'rgba(0,0,0,0.55)';
+      g.beginPath();
+      g.arc(s / 2, s * 0.42, 7, 0, Math.PI * 2);
+      g.fill();
+      g.fillRect(s / 2 - 4, s * 0.42, 8, 16);
+    }),
+  );
+
 /** Portals: a swirl. */
 export function portalTex() {
   return canvasTexture(

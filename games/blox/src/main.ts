@@ -13,6 +13,8 @@ import { WorldView } from './view/world';
 import { Controls } from './ui/controls';
 import { sfx, unlock } from './ui/sfx';
 import { UI } from './ui/ui';
+import type { Activity, WorldCtx } from './worlds/activity';
+import { ACTIVITIES } from './worlds';
 
 const store = gameStorage('blox');
 const save: Save = fixSave(store.load<Save>('save'));
@@ -69,6 +71,7 @@ let mode: Mode = 'title';
 let shopFrom: Mode = 'title';
 let sim!: Sim;
 let view: WorldView | null = null;
+let activity: Activity | null = null;
 let rig: Rig = buildAvatar(save.outfit);
 scene.add(rig.root);
 let runCoins = 0;
@@ -79,22 +82,51 @@ let busy = false; // during a fade between levels
 let camYaw = 0;
 let camPitch = 0.38;
 let camDist = 9;
+let liftPitch = 0; // extra camera tilt, to look over walls
 const camTarget = new THREE.Vector3();
 const prevPos = new THREE.Vector3();
 
 function loadLevel(id: string) {
   view?.dispose();
+  activity?.dispose();
+  activity = null;
+  ui.setActions([]);
+  ui.setLocked(false);
   const level = LEVELS[id];
   sim = new Sim(level); // the island always starts you facing the doorways
   view = new WorldView(level, save.done);
   scene.add(view.group);
   setSky(...level.sky);
+  activity = ACTIVITIES[id]?.(ctx) ?? null;
   camYaw = sim.yaw;
   camTarget.set(sim.pos[0], sim.pos[1] + 1.6, sim.pos[2]);
   prevPos.set(...sim.pos);
   runCoins = 0;
   ui.setCoins(save.coins);
 }
+
+const ctx: WorldCtx = {
+  scene,
+  camera,
+  get ui() {
+    return ui;
+  },
+  save,
+  sim: () => sim,
+  addCoins(n) {
+    save.coins += n;
+    ui.setCoins(save.coins);
+    persist();
+    sfx.coin();
+  },
+  complete(id) {
+    if (!save.done.includes(id)) save.done.push(id);
+    persist();
+  },
+  persist,
+  setSky,
+  confetti: (at) => confetti.burst(new THREE.Vector3(...at)),
+};
 
 function rebuildAvatar() {
   rig.dispose();
@@ -220,6 +252,17 @@ function handle(e: SimEvent) {
     case 'oops':
       sfx.oops();
       return ui.toast(['Whoops! 🙈', 'Try again! 💪', 'Oopsie! 😅'][Math.floor(Math.random() * 3)]);
+    case 'key':
+      sfx.buy();
+      return ui.toast(`🔑 Got the ${e.id} key!`);
+    case 'locked':
+      sfx.nope();
+      return ui.toast(e.key ? `🔒 Locked! Find the ${e.key} key` : '🔒 Locked!');
+    case 'door':
+      return sfx.checkpoint();
+    case 'spotted':
+      sfx.oops();
+      return ui.toast('🔦 Spotted! Back you go!');
     case 'portal':
       return goTo(e.level);
     case 'shop':
@@ -238,6 +281,39 @@ function handle(e: SimEvent) {
       return;
     }
   }
+}
+
+/** If a wall is between the player and the camera, bring the camera in front of it. Returns how much of the view was clear (0..1). */
+function keepInView(target: THREE.Vector3, cam: THREE.Vector3) {
+  const d = cam.clone().sub(target);
+  const len = d.length();
+  if (len < 0.01) return 1;
+  d.divideScalar(len);
+  let near = len;
+  const B = sim.level.blocks;
+  for (let i = 0; i < B.length; i++) {
+    if (!sim.blocksView(i)) continue;
+    const b = B[i], c = sim.at[i];
+    // Ray against the box (slab test), with the box grown a little so the camera doesn't touch it.
+    let t0 = 0, t1 = near;
+    const half = [b.w / 2 + 0.15, b.h / 2 + 0.15, b.d / 2 + 0.15];
+    const o = [target.x, target.y, target.z], v = [d.x, d.y, d.z];
+    let hit = true;
+    for (let k = 0; k < 3 && hit; k++) {
+      if (Math.abs(v[k]) < 1e-9) {
+        if (Math.abs(o[k] - c[k]) > half[k]) hit = false;
+        continue;
+      }
+      let a = (c[k] - half[k] - o[k]) / v[k], z = (c[k] + half[k] - o[k]) / v[k];
+      if (a > z) [a, z] = [z, a];
+      t0 = Math.max(t0, a);
+      t1 = Math.min(t1, z);
+      if (t0 > t1) hit = false;
+    }
+    if (hit && t0 > 0.05) near = Math.min(near, t0);
+  }
+  if (near < len) cam.copy(target).addScaledVector(d, Math.max(0.6, near - 0.1));
+  return near / len;
 }
 
 // ---------------------------------------------------------------- the loop
@@ -275,7 +351,7 @@ function frame(now: number) {
     acc -= STEP;
     prevPos.set(...sim.pos);
     let mx = 0, mz = 0, jump = false;
-    if (mode === 'play' && !busy) {
+    if (mode === 'play' && !busy && !activity?.locked()) {
       const m = controls.moveInput();
       const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
       mx = -fz * m.x + fx * m.y;
@@ -291,10 +367,15 @@ function frame(now: number) {
   const pz = prevPos.z + (sim.pos[2] - prevPos.z) * a;
 
   // The character.
+  if (mode === 'play' && !busy) activity?.update(dt, clock);
   rig.root.position.set(px, py, pz);
-  rig.root.rotation.y = sim.yaw;
+  rig.root.rotation.set(0, sim.yaw, 0);
+  rig.root.scale.set(1, sim.crawling ? 0.5 : 1, 1);
   animate(rig, clock, speed, !sim.onGround);
+  activity?.pose(rig, clock);
   view?.update(sim, clock, dt);
+  ui.setActions(mode === 'play' && !busy && activity ? activity.actions() : []);
+  ui.setLocked(!!activity?.locked());
   confetti.update(dt);
 
   // Camera: behind the player in play; slowly circling on the title screen; facing them in the shop.
@@ -314,13 +395,29 @@ function frame(now: number) {
     const w = window.innerWidth, h = window.innerHeight;
     camera.setViewOffset(w, h, w * 0.24, 0, w, h);
   }
-  const fx = Math.sin(yaw), fz = Math.cos(yaw);
-  camera.position.set(
-    camTarget.x - fx * dist * Math.cos(pitch),
-    camTarget.y + dist * Math.sin(pitch),
-    camTarget.z - fz * dist * Math.cos(pitch),
-  );
-  camera.lookAt(camTarget);
+  camera.up.set(0, 1, 0);
+  if (!(mode !== 'title' && mode !== 'shop' && activity?.camera(camera, { yaw: camYaw, pitch: camPitch, dist: camDist }, dt))) {
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    const place = (p: number) => {
+      camera.position.set(
+        camTarget.x - fx * dist * Math.cos(p),
+        camTarget.y + dist * Math.sin(p),
+        camTarget.z - fz * dist * Math.cos(p),
+      );
+      return keepInView(camTarget, camera.position);
+    };
+    // Walls in the way? Look down from higher up instead (where there's room), then pull in if still blocked.
+    let want = pitch;
+    if (mode === 'play') {
+      for (const p of [pitch, 0.75, 1.05, 1.3]) {
+        want = Math.max(pitch, p);
+        if (place(want) > 0.85) break;
+      }
+    }
+    liftPitch += (want - liftPitch) * Math.min(1, dt * 4);
+    place(Math.max(pitch, liftPitch));
+    camera.lookAt(camTarget);
+  }
 
   sun.position.set(camTarget.x + 10, camTarget.y + 22, camTarget.z + 8);
   sun.target.position.copy(camTarget);

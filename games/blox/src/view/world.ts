@@ -5,13 +5,15 @@ import type { Sim } from '../sim/physics';
 import type { Block, Kind, Level } from '../sim/types';
 import { LEVELS } from '../sim/levels';
 import { BoxBatch } from './boxes';
-import { beltTex, bounceTex, checkerTex, labelTex, lavaTex, portalTex, speedTex, tileTex } from './textures';
+import { beltTex, bounceTex, checkerTex, doorTex, grateTex, labelTex, lavaTex, portalTex, speedTex, tileTex } from './textures';
 
-type Look = 'tile' | 'lava' | 'bounce' | 'speed' | 'finish' | 'belt';
+type Look = 'tile' | 'lava' | 'bounce' | 'speed' | 'finish' | 'belt' | 'grate' | 'door';
 const LOOK: Record<Kind, Look> = {
-  solid: 'tile', checkpoint: 'tile', vanish: 'tile', portal: 'tile', shop: 'tile',
-  lava: 'lava', bounce: 'bounce', speed: 'speed', finish: 'finish', conveyor: 'belt',
+  solid: 'tile', checkpoint: 'tile', vanish: 'tile', portal: 'tile', shop: 'tile', crawl: 'tile', spot: 'tile', zone: 'tile',
+  lava: 'lava', bounce: 'bounce', speed: 'speed', finish: 'finish', conveyor: 'belt', door: 'door',
 };
+/** Blocks that aren't drawn as boxes (walk-through areas), or are drawn their own way. */
+const NOT_BOXES = new Set<Kind>(['portal', 'shop', 'crawl', 'zone', 'spot']);
 
 /** A copy of a shared texture, for materials that scroll it on their own. */
 function own(t: THREE.Texture) {
@@ -32,6 +34,10 @@ function material(look: Look) {
       return new THREE.MeshLambertMaterial({ vertexColors: true, map: checkerTex() });
     case 'belt':
       return new THREE.MeshLambertMaterial({ vertexColors: true, map: own(beltTex()) });
+    case 'grate':
+      return new THREE.MeshLambertMaterial({ vertexColors: true, map: grateTex(), transparent: true, alphaTest: 0.4, side: THREE.DoubleSide });
+    case 'door':
+      return new THREE.MeshLambertMaterial({ vertexColors: true, map: doorTex() });
     default:
       return new THREE.MeshLambertMaterial({ vertexColors: true, map: tileTex() });
   }
@@ -61,15 +67,19 @@ export class WorldView {
   private belts: { mat: THREE.MeshLambertMaterial; speed: number }[] = [];
   private dummy = new THREE.Object3D();
   private lastCheckpoint: [number, number, number] | null = null;
+  private keys: THREE.Group[] = [];
+  /** Doors: block index → how far open (0..1). */
+  private doors = new Map<number, number>();
 
   constructor(readonly level: Level, done: string[]) {
     const color = new THREE.Color();
     const batches = new Map<Look, BoxBatch>();
     level.blocks.forEach((b, i) => {
-      if (b.kind === 'portal' || b.kind === 'shop') return; // drawn below
+      if (NOT_BOXES.has(b.kind)) return; // drawn below, or not at all
       color.set(b.color);
-      const look = LOOK[b.kind];
-      if (b.move || b.kind === 'vanish') {
+      const look = b.see ? 'grate' : LOOK[b.kind];
+      if (b.kind === 'door') this.doors.set(i, 0);
+      if (b.move || b.kind === 'vanish' || b.kind === 'door') {
         const one = new BoxBatch();
         one.add(0, 0, 0, b.w, b.h, b.d, color, topSpin(b));
         const mat = material(look);
@@ -137,8 +147,10 @@ export class WorldView {
       tex.center.set(0.5, 0.5);
       this.texs.push(tex);
       const mat = this.track(new THREE.MeshBasicMaterial({ map: tex, color: b.color, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
-      const mesh = new THREE.Mesh(this.trackGeo(new THREE.PlaneGeometry(b.w, b.h)), mat);
+      const across = b.d > b.w; // doorways in a wall facing east or west
+      const mesh = new THREE.Mesh(this.trackGeo(new THREE.PlaneGeometry(across ? b.d : b.w, b.h)), mat);
       mesh.position.set(b.x, b.y, b.z);
+      if (across) mesh.rotation.y = Math.PI / 2;
       this.group.add(mesh);
       this.portals.push({ mesh, tex });
       const target = LEVELS[b.level!];
@@ -154,6 +166,53 @@ export class WorldView {
       if (b.kind !== 'shop') continue;
       const label = sprite('👕 Dress-Up Shop', '#e23d8f', 1.1);
       label.position.set(b.x + 0.5, 4.6, b.z);
+      this.group.add(label);
+      this.trackSprite(label);
+    }
+
+    // Searchlights: a pool of light on the ground and a faint beam.
+    level.blocks.forEach((b, i) => {
+      if (b.kind !== 'spot') return;
+      const g = new THREE.Group();
+      const r = Math.max(b.w, b.d) / 2 + 0.1;
+      const pool = new THREE.Mesh(
+        this.trackGeo(new THREE.CircleGeometry(r, 28).rotateX(-Math.PI / 2)),
+        this.track(new THREE.MeshBasicMaterial({ color: 0xfff3a0, transparent: true, opacity: 0.75, depthWrite: false })),
+      );
+      pool.position.y = -b.h / 2 + 0.03;
+      const beam = new THREE.Mesh(
+        this.trackGeo(new THREE.CylinderGeometry(r * 0.35, r, 14, 20, 1, true)),
+        this.track(new THREE.MeshBasicMaterial({ color: 0xfff3a0, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide })),
+      );
+      beam.position.y = -b.h / 2 + 7;
+      g.add(pool, beam);
+      g.position.set(b.x, b.y, b.z);
+      this.group.add(g);
+      this.loose.set(i, g as unknown as THREE.Mesh);
+    });
+
+    // Keys: spinning, in their colour.
+    for (const k of level.keys ?? []) {
+      const g = new THREE.Group();
+      const m = this.track(new THREE.MeshLambertMaterial({ color: k.color, emissive: new THREE.Color(k.color).multiplyScalar(0.35) }));
+      for (const [w, h, x, y] of [[0.5, 0.5, 0, 0.35], [0.14, 0.75, 0, -0.2], [0.22, 0.1, 0.14, -0.45], [0.18, 0.1, 0.12, -0.25]]) {
+        const part = new THREE.Mesh(this.trackGeo(new THREE.BoxGeometry(w, h, 0.12)), m);
+        part.position.set(x, y, 0);
+        part.castShadow = true;
+        g.add(part);
+      }
+      const hole = new THREE.Mesh(this.trackGeo(new THREE.BoxGeometry(0.2, 0.2, 0.14)), this.track(new THREE.MeshBasicMaterial({ color: 0x222222 })));
+      hole.position.y = 0.35;
+      g.add(hole);
+      g.position.set(...k.at);
+      this.group.add(g);
+      this.keys.push(g);
+    }
+
+    // Signs.
+    for (const s of level.signs ?? []) {
+      const label = sprite(s.text, s.color, s.size ?? 1);
+      label.position.set(...s.at);
       this.group.add(label);
       this.trackSprite(label);
     }
@@ -239,6 +298,21 @@ export class WorldView {
       this.coins.instanceMatrix.needsUpdate = true;
     }
     for (const p of this.portals) p.tex.rotation = -time * 1.5;
+    this.keys.forEach((k, i) => {
+      k.visible = !sim.keyTaken[i];
+      k.rotation.y = time * 2.5;
+      k.position.y = this.level.keys![i].at[1] + Math.sin(time * 2 + i) * 0.15;
+    });
+    // Doors slide up into the ceiling once opened.
+    for (const [i, open] of this.doors) {
+      const o = sim.opened.has(i) ? Math.min(1, open + dt * 1.5) : 0;
+      this.doors.set(i, o);
+      const b = this.level.blocks[i];
+      const mesh = this.loose.get(i)!;
+      mesh.position.y = b.y + o * (b.h - 0.2);
+      mesh.scale.y = 1 - o * 0.9;
+      mesh.visible = o < 1;
+    }
     for (const m of this.lavaMats) m.map!.offset.set(time * 0.05, time * 0.08);
     for (const b of this.belts) b.mat.map!.offset.y = (b.mat.map!.offset.y + b.speed * dt) % 1;
     const cp = sim.checkpoint;

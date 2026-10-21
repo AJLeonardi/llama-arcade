@@ -14,7 +14,17 @@ Run commands from the repo root (see the root `CLAUDE.md`); this game's tests: `
     Tuning constants (`WALK`, `JUMP`, `GRAVITY`, `BOUNCE`…) are at the top.
   - `course.ts`: `Course`, a cursor for laying out obbies along +z (`add({ gap, rise, side, kind… })`); it
     records the main `path` for the tests.
-  - `levels.ts`: the hub (Llama Island: portals, shop, trees, trampoline) and the obbies. `LEVELS`, `OBBY_IDS`.
+  - `levels.ts`: the hub (Llama Island: portals, shop, trees, trampoline) and the obbies. `LEVELS`, `OBBY_IDS`,
+    `WORLD_IDS` (the worlds below, through the doorways on the west side).
+  - `prison.ts`: Jail Break, a hand-built level (not a `Course`) with keys/doors, a vent maze (`crawl` zones under
+    see-through grates), and searchlights (`spot`). It has a `route` of waypoints for the robot test.
+  - `coaster.ts`: Coaster Park. `Track` turns a closed loop of points into evenly spaced samples with a forward and
+    an "up" (carried along smoothly so loops turn you upside down); `Ride` is one lap (chain lift, gravity, brakes).
+  - `rocket.ts`: Rocket Lab. Parts, `addPart`/`undoPart`/`checkDesign`, `liftRatio`, `steadiness` (fins low down
+    keep it straight), and `fly()`, which works out a whole flight up front (stages, boosters, air, wobble,
+    weaker gravity higher up). `hint()` says what to try next. Tuned so the Moon needs three stages and boosters.
+  - `burger.ts`: Llama Burgers. `Restaurant` (grill, fryer, hands, customers at the counter and drive-through,
+    `actions(station)` / `act(id)` / `step(dt)` → events) and the building.
   - `shop.ts`: the outfit catalogue (`ITEMS`), `Save` (coins, owned, outfit, done), `fixSave`, `pick` (buy/wear).
 - `src/view/`: three.js.
   - `boxes.ts`: `BoxBatch` merges many boxes into one geometry with vertex colours and world-sized UVs.
@@ -26,8 +36,14 @@ Run commands from the repo root (see the root `CLAUDE.md`); this game's tests: `
 - `src/ui/`: `ui.ts` (HUD, menus, shop panel; DOM only written on change), `controls.ts` (floating touch
   joystick on the left 45%, look-drag elsewhere, jump button, keyboard), `sfx.ts` (WebAudio beeps),
   `style.css`.
+- `src/worlds/`: the worlds' own games, plugged into main.ts through `Activity` (`activity.ts`): context
+  buttons, locking the player while riding/building, placing the avatar and the camera. `index.ts` maps level
+  id → activity. `coaster.ts` (tracks, trains, wheel, riding cameras), `rocket.ts` (workshop panel, rocket
+  meshes, flight playback with time speed-up, sky/planet/Moon), `burger.ts` (customers, cars, bubbles, food),
+  `npc.ts` (random riders and customers, sitting pose).
 - `src/main.ts`: renderer, sky, lights, the mode machine (`title`, `play`, `pause`, `shop`, `finish`), the
-  loop (fixed-step sim + interpolated player), the follow camera and saving (`gameStorage('blox')`, key `save`).
+  loop (fixed-step sim + interpolated player), the follow camera (it tilts up, then pulls in, to see over walls:
+  `keepInView`) and saving (`gameStorage('blox')`, key `save`; Rocket Lab keeps the rocket under key `rocket`).
   `window.__blox` exposes `sim`, `save`, `LEVELS` and `goTo(levelId)` for poking from the console.
 
 ## Making levels
@@ -38,7 +54,12 @@ Run commands from the repo root (see the root `CLAUDE.md`); this game's tests: `
   stripes at least ~7 apart so landing from one jump doesn't put you on the next; and a bounce pad's
   target platform must be at least ~3.5 away, or you bonk your head on its underside on the way up.
 - Special blocks always use the same colours (`course.ts:KIND_COLOR`) so kids learn what they do.
+- Levels that aren't a straight `Course` get a `route` (waypoints; `wait: true` = wait for searchlights) and a
+  test using `tests/robot.ts:walkRoute`. Also test that the keys/trampoline are really needed.
+- Walls only need to be taller than a jump from the highest thing next to them (~2.3 + that height). Keep them
+  low where you can: the camera has to see over them.
 
 ## Ideas for later
 
-More obbies, pets that follow you, a build mode (place blocks), playing together over QR pairing.
+More obbies, pets that follow you, a build mode (place blocks), playing together over QR pairing. Rocket Lab:
+landing on the Moon. Burgers: more foods, a busier lunch rush.

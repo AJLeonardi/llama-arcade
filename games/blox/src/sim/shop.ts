@@ -77,8 +77,10 @@ export interface Save {
   coins: number;
   owned: string[];
   outfit: Outfit;
-  /** Obbies finished at least once. */
+  /** Obbies (and worlds) finished at least once. */
   done: string[];
+  /** Per-world numbers: rides ridden, best rocket height, burgers served... */
+  stats: Record<string, number>;
 }
 
 export function newSave(): Save {
@@ -87,6 +89,7 @@ export function newSave(): Save {
     owned: [],
     outfit: { body: 'llama', color: 'c-cream', pants: 'p-blue', skin: 's-yellow', hat: 'h-none', glasses: 'g-none', cape: 'k-none' },
     done: [],
+    stats: {},
   };
 }
 
@@ -104,6 +107,9 @@ export function fixSave(s: Partial<Save> | undefined): Save {
     owned: Array.isArray(s.owned) ? s.owned.filter((id) => typeof id === 'string') : [],
     outfit,
     done: Array.isArray(s.done) ? s.done.filter((id) => typeof id === 'string') : [],
+    stats: Object.fromEntries(
+      Object.entries(s.stats && typeof s.stats === 'object' ? s.stats : {}).filter(([, v]) => Number.isFinite(v)),
+    ),
   };
 }
 
