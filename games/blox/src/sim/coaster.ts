@@ -46,9 +46,9 @@ export interface TrackPoint {
 }
 
 const G = 9.8;
-const LIFT_SPEED = 5; // chain lift (m/s)
-const MIN_SPEED = 3; // never stalls (it's a game)
-const LAUNCH = 3; // leaving the station
+const LIFT_SPEED = 8; // chain lift (m/s)
+const MIN_SPEED = 5; // never stalls (it's a game)
+const LAUNCH = 6; // leaving the station
 const SAMPLE = 0.25; // metres between samples
 
 /** Uniform Catmull-Rom through p1..p2 (p0, p3 are the neighbours). */
@@ -152,15 +152,15 @@ export class Ride {
     const T = this.track;
     const left = T.length - this.d;
     const slope = T.at(this.s).t[1];
-    if (this.d < 6) this.v = Math.max(this.v, Math.min(LAUNCH, this.v + dt * 4));
+    if (this.d < 6) this.v = Math.max(this.v, Math.min(LAUNCH, this.v + dt * 6));
     else if (T.lift(this.s)) this.v = Math.max(LIFT_SPEED, this.v - G * slope * dt);
     else {
-      this.v -= G * slope * dt; // downhill speeds you up, uphill slows you down
-      this.v -= (0.02 + 0.0012 * this.v * this.v) * dt * 10; // air and wheels
+      this.v -= G * 1.3 * slope * dt; // downhill speeds you up, uphill slows you down (a bit more than real, for fun)
+      this.v -= (0.02 + 0.0007 * this.v * this.v) * dt * 10; // air and wheels
       this.v = Math.max(MIN_SPEED, this.v);
     }
     // Brakes into the station.
-    if (left < 30) this.v = Math.min(this.v, Math.max(1.2, left * 0.45));
+    if (left < 30) this.v = Math.min(this.v, Math.max(1.5, left * 0.6));
     this.maxV = Math.max(this.maxV, this.v);
     this.d += this.v * dt;
     if (this.d >= T.length) {
@@ -296,9 +296,16 @@ export function coasterPark(): Level {
   }
   let seed = 5;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  for (let i = 0; i < 40; i++) {
+  // Trees, but not where a track or a ride goes.
+  const tracks = COASTERS.filter((c) => c.kind === 'coaster').map((c) => new Track(c).pts);
+  const wheel = COASTERS.find((c) => c.kind === 'wheel')!;
+  const clear = (x: number, z: number) =>
+    Math.hypot(x, z) > 20 &&
+    Math.abs(x - wheel.centre![0]) > wheel.radius! + 5 &&
+    tracks.every((pts) => pts.every((p) => Math.hypot(p[0] - x, p[2] - z) > 6));
+  for (let i = 0; i < 60; i++) {
     const x = (rnd() - 0.5) * 230, z = (rnd() - 0.5) * 230;
-    if (Math.hypot(x, z) < 20) continue;
+    if (!clear(x, z)) continue;
     box(x, 0, z, 0.8, 2.4, 0.8, '#8a5a2b', { deco: true });
     box(x, 2.4, z, 2.8, 2.4, 2.8, '#2f9e44', { deco: true });
   }

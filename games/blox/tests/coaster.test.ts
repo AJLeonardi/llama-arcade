@@ -17,8 +17,8 @@ describe('coasters', () => {
       expect(r.done).toBe(true);
       expect(time).toBeGreaterThan(15);
       expect(time).toBeLessThan(120);
-      expect(minV).toBeGreaterThanOrEqual(2.9);
-      expect(r.maxV).toBeLessThan(32);
+      expect(minV).toBeGreaterThanOrEqual(4.9);
+      expect(r.maxV).toBeLessThan(36);
       expect(lowest).toBeGreaterThan(0.4);
       console.log(t.def.id, 'length', t.length.toFixed(0), 'time', time.toFixed(1), 'max', r.maxV.toFixed(1));
     });
@@ -48,6 +48,11 @@ describe('coasters', () => {
         expect(min, `${tracks[a].def.id} vs ${tracks[b].def.id}`).toBeGreaterThan(5);
       }
     }
+  });
+
+  it('no trees on the tracks', () => {
+    const trunks = coasterPark().blocks.filter((b) => b.deco && b.color === '#8a5a2b');
+    for (const t of tracks) for (const p of t.pts) for (const b of trunks) expect(Math.hypot(p[0] - b.x, p[2] - b.z)).toBeGreaterThan(5);
   });
 
   it('every ride has a station zone in the park', () => {
