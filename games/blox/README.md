@@ -33,6 +33,17 @@ A blocky 3D world, a bit like Roblox. Run around **Llama Island**, jump through 
   or at the 🚗 drive-through window. Bubbles show what each customer wants. Every 10 orders gives a bonus
   (and the ⭐). Customers wait a long time; if one gives up they just go home.
 
+- 🐠 **Fish Tank to the Ocean** (the doorway on the east side): pick your fish (clownfish, goldfish, bass,
+  blue tang, pufferfish or baby shark) and roll it in its fish bowl all the way from a pet store to the ocean in
+  San Francisco, in 7 levels (play any of them): 1. Pet Store & Home (roll into the bag so someone buys you, then
+  get out through the aquarium filter before the ⏰ 3-minute clock runs out, or start again in the house),
+  2. Down the Pipes, 3. Stinky Sewer, 4. Rooftop Roll, 5. Power Line Panic, 6. Hilly Streets (Lombard Street and a
+  cable car), 7. Golden Gate to the Ocean. The bowl rolls and keeps rolling (JUMP hops). A big fall, the green
+  goo, hot pipes or sparks **crack** it and you go back to the last checkpoint. Tap **🐟 Flop out!** to jump out
+  of the bowl: a fish jumps higher and fits through small gaps, but has only **50 seconds of air** (the bar at
+  the top) until it lands in something full of water (a 🍼 water bottle rolls faster, a 🪣 bucket is tougher, a
+  spare bowl). Every level cleared gives coins; clearing all 7 earns the ⭐. Designed by our resident 7-year-old.
+
 | Block | What it does |
 |---|---|
 | 🟥 Orange lava | Touching it sends you back to the last checkpoint ("Whoops!"). Nobody gets hurt. |

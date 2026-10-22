@@ -34,6 +34,15 @@ export interface WorldCtx {
   persist(): void;
   setSky(top: string, horizon: string): void;
   confetti(at: V3): void;
+  /** Go to another level (with the white flash). */
+  goTo(id: string): void;
+}
+
+/** The player's controls, already turned to match the camera (world x/z). */
+export interface DriveInput {
+  moveX: number;
+  moveZ: number;
+  jump: boolean;
 }
 
 export interface Activity {
@@ -47,5 +56,15 @@ export interface Activity {
   pose(rig: Rig, t: number): boolean;
   /** Place the camera yourself; return true if you did. */
   camera(cam: THREE.PerspectiveCamera, view: CamView, dt: number): boolean;
+  /**
+   * Optional: the world moves its own player (a rolling fish bowl) instead of the walker. Called every physics
+   * step while playing, with the controls; the walker then stands still.
+   */
+  drive?(input: DriveInput, dt: number): void;
+  /**
+   * Optional: what the normal follow camera looks at instead of the walker, and how it's moving (so the camera
+   * swings round behind it). `alpha` is how far we are between two physics steps, for smooth drawing.
+   */
+  follow?(alpha: number): { at: V3; vel: V3 } | null;
   dispose(): void;
 }

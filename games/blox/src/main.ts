@@ -126,6 +126,7 @@ const ctx: WorldCtx = {
   persist,
   setSky,
   confetti: (at) => confetti.burst(new THREE.Vector3(...at)),
+  goTo: (id) => goTo(id),
 };
 
 function rebuildAvatar() {
@@ -322,6 +323,8 @@ let last = performance.now();
 let acc = 0;
 let clock = 0;
 let lastLook = -10; // when the player last turned the camera themselves
+/** What the camera follows when a world moves its own player (the fish bowl), from the last frame. */
+let followed: { at: [number, number, number]; vel: [number, number, number] } | null = null;
 
 function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000);
@@ -338,9 +341,11 @@ function frame(now: number) {
   camPitch = Math.max(-0.15, Math.min(1.2, camPitch + controls.lookY));
   camDist = Math.max(4, Math.min(16, camDist + controls.zoom * 0.8));
   controls.lookX = controls.lookY = controls.zoom = 0;
-  const speed = Math.hypot(sim.vel[0], sim.vel[2]);
+  const mover = followed?.vel ?? sim.vel;
+  const speed = Math.hypot(mover[0], mover[2]);
+  const facing = followed ? Math.atan2(mover[0], mover[2]) : sim.yaw;
   if (mode === 'play' && clock - lastLook > 1.5 && speed > 1) {
-    const d = Math.atan2(Math.sin(sim.yaw - camYaw), Math.cos(sim.yaw - camYaw));
+    const d = Math.atan2(Math.sin(facing - camYaw), Math.cos(facing - camYaw));
     // Not when walking towards the camera, or it would spin round.
     if (Math.abs(d) < 2.2) camYaw += d * Math.min(1, dt * 1.2 * Math.min(1, speed / 7));
   }
@@ -358,8 +363,11 @@ function frame(now: number) {
       mz = fx * m.x + fz * m.y;
       jump = controls.takeJump();
     }
-    const events = sim.step({ moveX: mx, moveZ: mz, jump });
+    // A world that moves its own player gets the controls; the (hidden) walker just stands there.
+    const drive = activity?.drive ? activity : null;
+    const events = sim.step(drive ? { moveX: 0, moveZ: 0, jump: false } : { moveX: mx, moveZ: mz, jump });
     if (mode === 'play' && !busy) for (const e of events) handle(e);
+    if (drive && mode === 'play' && !busy) drive.drive!({ moveX: mx, moveZ: mz, jump }, STEP);
   }
   const a = acc / STEP;
   const px = prevPos.x + (sim.pos[0] - prevPos.x) * a;
@@ -379,7 +387,8 @@ function frame(now: number) {
   confetti.update(dt);
 
   // Camera: behind the player in play; slowly circling on the title screen; facing them in the shop.
-  const want = new THREE.Vector3(px, py + 1.6, pz);
+  followed = activity?.follow?.(a) ?? null;
+  const want = followed ? new THREE.Vector3(...followed.at) : new THREE.Vector3(px, py + 1.6, pz);
   camTarget.lerp(want, Math.min(1, dt * 10));
   let yaw = camYaw, pitch = camPitch, dist = camDist;
   camera.clearViewOffset();

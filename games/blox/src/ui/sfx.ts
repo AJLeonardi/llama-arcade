@@ -51,5 +51,7 @@ export const sfx = {
     tone(2093, 0.3, { vol: 0.05, at: 0.1 });
   },
   click: () => tone(700, 0.05, { type: 'triangle', vol: 0.1 }),
+  /** A glassy bonk off a wall; louder the harder you hit. */
+  bonk: (hard: number) => tone(1200, 0.12, { to: 700, type: 'sine', vol: 0.04 + hard * 0.1 }),
   nope: () => tone(200, 0.2, { type: 'triangle', vol: 0.12 }),
 };

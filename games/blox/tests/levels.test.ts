@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { FAST, HALF_W, JUMP, GRAVITY, Sim, WALK, type SimEvent } from '../src/sim/physics';
 import { LEVELS, OBBY_IDS, WORLD_IDS } from '../src/sim/levels';
+import { FISH_IDS } from '../src/sim/fishLevels';
 import type { Block, Level, V3 } from '../src/sim/types';
 
 const top = (b: Block, c: V3) => c[1] + b.h / 2;
@@ -86,8 +87,9 @@ function playthrough(level: Level, maxSeconds = 240) {
 }
 
 describe('levels', () => {
-  it('has a hub, three obbies and four worlds', () => {
-    expect(Object.keys(LEVELS).sort()).toEqual(['burger', 'candy', 'castle', 'coaster', 'hub', 'prison', 'rainbow', 'rocket']);
+  it('has a hub, three obbies, four worlds and the seven fish levels', () => {
+    expect(Object.keys(LEVELS).sort()).toEqual(['burger', 'candy', 'castle', 'coaster', ...FISH_IDS.slice().sort(), 'hub', 'prison', 'rainbow', 'rocket'].sort());
+    expect(FISH_IDS).toEqual(['fish', 'fish2', 'fish3', 'fish4', 'fish5', 'fish6', 'fish7']);
     expect(OBBY_IDS).toEqual(['rainbow', 'candy', 'castle']);
     expect(WORLD_IDS).toEqual(['prison', 'rocket', 'coaster', 'burger']);
   });
@@ -104,7 +106,7 @@ describe('levels', () => {
 
   it('the hub has a portal to every obby and world, and the shop; every world has a way home', () => {
     const hub = LEVELS.hub;
-    for (const id of [...OBBY_IDS, ...WORLD_IDS]) expect(hub.blocks.some((b) => b.kind === 'portal' && b.level === id)).toBe(true);
+    for (const id of [...OBBY_IDS, ...WORLD_IDS, 'fish']) expect(hub.blocks.some((b) => b.kind === 'portal' && b.level === id)).toBe(true);
     for (const id of WORLD_IDS.filter((w) => w !== 'prison')) {
       expect(LEVELS[id].blocks.some((b) => b.kind === 'portal' && b.level === 'hub'), id).toBe(true);
     }

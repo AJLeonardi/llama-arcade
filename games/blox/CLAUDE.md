@@ -25,6 +25,12 @@ Run commands from the repo root (see the root `CLAUDE.md`); this game's tests: `
     weaker gravity higher up). `hint()` says what to try next. Tuned so the Moon needs three stages and boosters.
   - `burger.ts`: Llama Burgers. `Restaurant` (grill, fryer, hands, customers at the counter and drive-through,
     `actions(station)` / `act(id)` / `step(dt)` → events) and the building.
+  - `fish.ts`: Fish Tank to the Ocean. `FishSim` is a ball (the bowl, bottle or bucket, or the fish on its own while
+    flopping) rolling over the level's boxes and `Ramp`s (sloped tops, only solid from above): sphere-vs-box
+    contacts, rolling drag, cracking on hard landings (`VESSELS[v].crack`) or in hazard zones (`goo`, `hot`,
+    `drop`), the 50 s air bar, water objects to jump into, and level 1's bag (`buy`) and clock. `fishLevels.ts`
+    has the 7 levels (`Build` helper, all laid out along +z) with a `route` each for the robot in
+    `tests/fish.test.ts`. The walker waits on a block up in the sky in these levels, hidden.
   - `shop.ts`: the outfit catalogue (`ITEMS`), `Save` (coins, owned, outfit, done), `fixSave`, `pick` (buy/wear).
 - `src/view/`: three.js.
   - `boxes.ts`: `BoxBatch` merges many boxes into one geometry with vertex colours and world-sized UVs.
@@ -40,7 +46,9 @@ Run commands from the repo root (see the root `CLAUDE.md`); this game's tests: `
   buttons, locking the player while riding/building, placing the avatar and the camera. `index.ts` maps level
   id → activity. `coaster.ts` (tracks, trains, wheel, riding cameras), `rocket.ts` (workshop panel, rocket
   meshes, flight playback with time speed-up, sky/planet/Moon), `burger.ts` (customers, cars, bubbles, food),
-  `npc.ts` (random riders and customers, sitting pose).
+  `npc.ts` (random riders and customers, sitting pose), `fish.ts` (bowl/fish/ramp meshes, the fish and level menu, air
+  bar and clock; it uses the optional `Activity.drive`/`follow` so main.ts sends it the controls and the camera
+  follows the bowl; saves under key `fish`; `window.__fish` for poking).
 - `src/main.ts`: renderer, sky, lights, the mode machine (`title`, `play`, `pause`, `shop`, `finish`), the
   loop (fixed-step sim + interpolated player), the follow camera (it tilts up, then pulls in, to see over walls:
   `keepInView`) and saving (`gameStorage('blox')`, key `save`; Rocket Lab keeps the rocket under key `rocket`).
@@ -58,6 +66,9 @@ Run commands from the repo root (see the root `CLAUDE.md`); this game's tests: `
   test using `tests/robot.ts:walkRoute`. Also test that the keys/trampoline are really needed.
 - Walls only need to be taller than a jump from the highest thing next to them (~2.3 + that height). Keep them
   low where you can: the camera has to see over them.
+- Fish levels: a bowl jump is ~1.6 up and ~4.5 across; falls over ~5 crack it; a bounce target should start
+  ~2–3 beyond the pad's edge or the ball hits its side on the way up. Hazard zones only count when you're well
+  inside them; give the robot a `jump` waypoint just before each one.
 
 ## Ideas for later
 

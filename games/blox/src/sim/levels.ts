@@ -5,6 +5,7 @@ import { Course } from './course';
 import { jailBreak } from './prison';
 import { burgerPlace } from './burger';
 import { rocketLab } from './rocket';
+import { FISH_LEVELS } from './fishLevels';
 import type { Block, Level, V3 } from './types';
 
 const PI = Math.PI;
@@ -162,7 +163,7 @@ const WORLDS = [jailBreak(), rocketLab(), coasterPark(), burgerPlace()];
 /** Portal colours, one per obby or world. */
 const PORTAL_COLOR: Record<string, string> = {
   rainbow: '#4dabf7', candy: '#ff6fbf', castle: '#9775fa',
-  prison: '#748ffc', rocket: '#ff922b', coaster: '#20c997', burger: '#f59f00',
+  prison: '#748ffc', rocket: '#ff922b', coaster: '#20c997', burger: '#f59f00', fish: '#15aabf',
 };
 
 function hub(): Level {
@@ -199,6 +200,16 @@ function hub(): Level {
     box(x + 1.5, 0.15, z, 2, 0.3, 5.8, PORTAL_COLOR[lv.id]);
     blocks.push({ x, y: 2.75, z, w: 0.6, h: 5.5, d: 3.8, kind: 'portal', color: PORTAL_COLOR[lv.id], level: lv.id });
   });
+  // Fish Tank to the Ocean, on the east side, facing west.
+  {
+    const x = 21, z = -4, c = PORTAL_COLOR.fish;
+    box(x, 2.75, z - 2.4, 1, 5.5, 1, '#f1f3f5');
+    box(x, 2.75, z + 2.4, 1, 5.5, 1, '#f1f3f5');
+    box(x, 6, z, 1, 1, 5.8, c);
+    box(x - 1.5, 0.15, z, 2, 0.3, 5.8, c);
+    blocks.push({ x, y: 2.75, z, w: 0.6, h: 5.5, d: 3.8, kind: 'portal', color: c, level: 'fish' });
+    box(12.5, 0.05, -4, 15, 0.1, 3, '#e8d9b5', { deco: true });
+  }
   box(-11, 0.05, 1, 18, 0.1, 3, '#e8d9b5', { deco: true });
   box(-18.5, 0.05, 3, 3, 0.1, 30, '#e8d9b5', { deco: true });
 
@@ -248,6 +259,8 @@ function hub(): Level {
   };
 }
 
-export const LEVELS: Record<string, Level> = Object.fromEntries([hub(), ...OBBIES, ...WORLDS].map((l) => [l.id, l]));
+export const LEVELS: Record<string, Level> = Object.fromEntries(
+  [hub(), ...OBBIES, ...WORLDS, ...FISH_LEVELS.map((f) => f.level)].map((l) => [l.id, l]),
+);
 export const OBBY_IDS = OBBIES.map((l) => l.id);
 export const WORLD_IDS = WORLDS.map((l) => l.id);
