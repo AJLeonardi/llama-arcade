@@ -34,9 +34,11 @@ First time on a machine: `npm install && npx playwright install chromium`.
 
 ```
 index.html, src/        the arcade landing page (tiles come from games/*/game.json)
+parents/                the page for parents (/parents/): why we made this, how to add to the home screen
 games/<id>/             one game: index.html, game.json, src/, tests/, README.md, CLAUDE.md
 public/games/<id>/      that game's static files, copied as-is: manifest, icons, textures
 public/arcade/          the arcade's own manifest + icons
+public/parents/         the parents page's "add to home screen" GIF
 shared/                 code every game uses (see below)
 templates/2d-starter/   the starting point for new games (type-checked, not deployed)
 scripts/                smoke test, icon maker

@@ -18,7 +18,10 @@ const root = import.meta.dirname;
 
 /** Every games/<id>/index.html is a page of the site, so a new game needs no config change. */
 function pages() {
-  const input: Record<string, string> = { arcade: resolve(root, 'index.html') };
+  const input: Record<string, string> = {
+    arcade: resolve(root, 'index.html'),
+    parents: resolve(root, 'parents/index.html'),
+  };
   for (const id of readdirSync(resolve(root, 'games'))) {
     const page = resolve(root, 'games', id, 'index.html');
     if (existsSync(page)) input[id] = page;

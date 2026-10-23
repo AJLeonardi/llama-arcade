@@ -13,7 +13,7 @@ if (shots) mkdirSync(shots, { recursive: true });
 const WAIT_MS = 8000; // long enough for the 3D games to build their worlds
 
 const games = readdirSync(join(root, 'games')).filter((id) => existsSync(join(root, 'games', id, 'index.html')));
-const pages = [{ name: 'arcade', path: '' }, ...games.map((id) => ({ name: id, path: `games/${id}/` }))];
+const pages = [{ name: 'arcade', path: '' }, { name: 'parents', path: 'parents/' }, ...games.map((id) => ({ name: id, path: `games/${id}/` }))];
 
 const server = await preview({ root, preview: { port: 4183, strictPort: false }, logLevel: 'silent' });
 const base = server.resolvedUrls.local[0];

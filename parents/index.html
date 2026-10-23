@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#24124a" />
+    <link rel="icon" type="image/png" href="../arcade/icon-192.png" />
+    <link rel="apple-touch-icon" href="../arcade/icon-180.png" />
+    <meta name="description" content="Why we made Llama Arcade, and how to put it on your home screen." />
+    <title>Llama Arcade for Parents</title>
+    <link rel="stylesheet" href="./parents.css" />
+  </head>
+  <body>
+    <header>
+      <a class="back" href="../">← Back to the games</a>
+      <h1>🦙 For Parents</h1>
+      <p class="tagline">Games For Kids By Kids</p>
+    </header>
+
+    <main>
+      <section>
+        <h2>Why we made this</h2>
+        <p>
+          I got tired of watching my kids play games stuffed with ads, pop-ups and “buy more gems” buttons:
+          games built to keep them tapping and spending, not to be fun. Too often, playtime ended in frustration.
+        </p>
+        <p>
+          So we decided to make our own. My kids dream up the games (the worlds, the rules and all the silly
+          parts) and we build them together with help from Claude, an AI assistant. Every game here started as
+          a kid’s idea.
+        </p>
+      </section>
+
+      <section>
+        <h2>What you won’t find here</h2>
+        <ul class="nos">
+          <li><b>No ads.</b> Not one.</li>
+          <li><b>No in-app purchases.</b> Everything is free.</li>
+          <li><b>No blood or gore.</b> Not even a little.</li>
+          <li><b>No violence.</b> Cars crash and llamas tumble, but nobody ever gets hurt.</li>
+          <li><b>No accounts or sign-ups.</b> Just tap and play.</li>
+          <li><b>No tracking.</b> Saved games stay on your device.</li>
+        </ul>
+      </section>
+
+      <section class="install">
+        <h2>Make it look like a real app</h2>
+        <p>
+          Add Llama Arcade to your iPhone or iPad home screen and it gets its own icon and opens full
+          screen, with no browser bars, just like an app from the App Store. Once it’s been opened, it
+          even works without Wi-Fi. You can add the whole arcade, or just your kid’s favorite game.
+        </p>
+        <div class="gifs">
+          <figure>
+            <img data-src="./add-to-home-screen.gif" width="420" height="820"
+                 alt="Animation: in Safari, tap Share, then Add to Home Screen, then Add. The Llama Arcade icon appears on the home screen and opens full screen." />
+            <figcaption>Add the whole arcade</figcaption>
+          </figure>
+          <figure>
+            <img data-src="./add-a-game.gif" width="420" height="820"
+                 alt="Animation: in the arcade, tap Llama Rocket Builder, then Share, Add to Home Screen and Add. The game gets its own icon and opens straight into the game." />
+            <figcaption>Or add just one game</figcaption>
+          </figure>
+        </div>
+        <div class="steps">
+          <div>
+            <h3>iPhone and iPad (Safari)</h3>
+            <ol>
+              <li>Open <b>llamaarcade.com</b> in Safari.</li>
+              <li>Tap the <b>Share</b> button (the square with an arrow). On newer iOS it may be inside the <b>···</b> menu.</li>
+              <li>Tap <b>Add to Home Screen</b>.</li>
+              <li>Tap <b>Add</b>.</li>
+            </ol>
+          </div>
+          <div>
+            <h3>iPhone and iPad (Chrome)</h3>
+            <ol>
+              <li>Open <b>llamaarcade.com</b> in Chrome.</li>
+              <li>Tap the <b>Share</b> button in the address bar.</li>
+              <li>Tap <b>Add to Home Screen</b>.</li>
+              <li>Tap <b>Add</b>.</li>
+            </ol>
+          </div>
+          <div>
+            <h3>Android (Chrome)</h3>
+            <ol>
+              <li>Open <b>llamaarcade.com</b> in Chrome.</li>
+              <li>Tap the <b>⋮</b> menu.</li>
+              <li>Tap <b>Add to Home screen</b> (or <b>Install app</b>).</li>
+            </ol>
+          </div>
+        </div>
+        <p class="tip">💡 To give one game its own icon, tap the game first, then follow the same steps.</p>
+      </section>
+    </main>
+
+    <footer><a class="back" href="../">← Back to the games</a></footer>
+
+    <script>
+      // The two GIFs are the same length; load both first, then start them together so they play in step.
+      const gifs = [...document.querySelectorAll('img[data-src]')];
+      Promise.all(gifs.map((img) => { const pre = new Image(); pre.src = img.dataset.src; return pre.decode().catch(() => {}); }))
+        .then(() => gifs.forEach((img) => (img.src = img.dataset.src)));
+    </script>
+  </body>
+</html>

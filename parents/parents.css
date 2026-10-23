@@ -1,0 +1,40 @@
+:root {
+  --bg: #24124a;
+  --bg2: #3b1d73;
+  --card: rgba(255, 255, 255, 0.07);
+  --text: #fff;
+  --muted: #c9b8ef;
+  --gold: #ffe066;
+  --font: "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: radial-gradient(circle at 50% 0%, var(--bg2), var(--bg) 70%) fixed, var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  line-height: 1.55;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+header, main, footer { max-width: 860px; margin: 0 auto; }
+header { text-align: center; margin-bottom: 24px; }
+h1 { margin: 12px 0 0; font-size: clamp(34px, 7vw, 56px); color: var(--gold); text-shadow: 0 4px 0 #6a2a00; }
+.tagline { margin: 4px 0 0; font-size: 20px; color: var(--muted); }
+h2 { margin: 0 0 10px; font-size: 26px; color: var(--gold); }
+h3 { margin: 18px 0 4px; font-size: 18px; }
+section { background: var(--card); border: 2px solid rgba(255, 255, 255, 0.12); border-radius: 24px; padding: 20px 22px; margin-bottom: 20px; }
+p { margin: 0 0 12px; font-family: system-ui, sans-serif; font-size: 17px; }
+ol, ul { margin: 0; padding-left: 22px; font-family: system-ui, sans-serif; font-size: 17px; }
+li { margin: 4px 0; }
+.nos { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 10px; }
+.nos li { margin: 0; background: rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 12px 14px; }
+.nos li::before { content: "🚫 "; }
+.gifs { display: flex; flex-wrap: wrap; justify-content: center; gap: 24px; margin: 8px 0 20px; padding: 20px; border: 2px solid rgba(255, 224, 102, 0.45); border-radius: 24px; background: rgba(0, 0, 0, 0.18); }
+.gifs figure { margin: 0; width: min(100%, 260px); text-align: center; }
+.gifs img { display: block; width: 100%; height: auto; aspect-ratio: 420 / 820; border-radius: 20px; background: #24124a; }
+.gifs figcaption { margin-top: 8px; font-size: 18px; color: var(--gold); }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 0 28px; }
+.tip { margin-top: 16px; color: var(--muted); }
+a { color: var(--gold); }
+.back { display: inline-block; font-size: 17px; text-decoration: none; }
+footer { text-align: center; margin-top: 8px; }
