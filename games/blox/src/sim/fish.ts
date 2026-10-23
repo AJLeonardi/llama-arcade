@@ -4,7 +4,7 @@
 // water (a bottle, a bucket, a spare bowl), which becomes its new ride.
 // Pure maths, no three.js: tested in tests/fish.test.ts. The levels are in fishLevels.ts.
 import { blockOffset, STEP } from './physics';
-import type { Block, Level, V3 } from './types';
+import type { Block, Level, Surface, V3 } from './types';
 
 export const GRAVITY = 30;
 export const AIR = 50; // seconds of air out of the water
@@ -68,6 +68,7 @@ export interface Ramp {
   y0: number;
   y1: number;
   color: string;
+  surface?: Surface;
 }
 
 /** Something full of water a flopping fish can jump into. `at` is where it stands. */

@@ -5,8 +5,9 @@ import * as THREE from 'three';
 import { gameStorage } from '../../../../shared/storage';
 import { AIR, FISHES, FishSim, HAZARD_TAGS, VESSELS, type FishDef, type FishEvent, type FishLevel, type Ramp, type Vessel } from '../sim/fish';
 import { FISH_BY_ID, FISH_LEVELS } from '../sim/fishLevels';
-import type { V3 } from '../sim/types';
+import type { Surface, V3 } from '../sim/types';
 import type { Rig } from '../view/avatar';
+import { gooTex, surfaceTex, waveTex } from '../view/textures';
 import { sfx } from '../ui/sfx';
 import type { Action, Activity, DriveInput, WorldCtx } from './activity';
 import { randomRider } from './npc';
@@ -68,6 +69,15 @@ export class FishWorld implements Activity {
   private leftMeshes: THREE.Group[] = [];
   private hazards: { mesh: THREE.Mesh; mat: THREE.MeshLambertMaterial; tag: string }[] = [];
   private exits: THREE.Mesh[] = [];
+  /** Textures that flow along (goo, the sea). */
+  private scrolling: { tex: THREE.Texture; speed: number }[] = [];
+  /** Fish swimming in the aquariums, and bubbles rising in them. */
+  private tankFish: { mesh: THREE.Group; x: number; z: number; y: number; along: 'x' | 'z'; reach: number; speed: number; phase: number }[] = [];
+  private bubbles: { mesh: THREE.Mesh; x: number; z: number; y0: number; h: number; phase: number }[] = [];
+  /** The parts of the player that don't roll: the water inside and the shine on the glass. */
+  private still = new THREE.Group();
+  private shine = new THREE.Group();
+  private sphereGeo: THREE.SphereGeometry | null = null;
   private meter = el('div', 'pill fish-meter hidden');
   private meterKey = '';
   private menuOpen = false;
@@ -90,7 +100,13 @@ export class FishWorld implements Activity {
     this.buildZones();
     this.buildWaters();
     this.buildExtras();
-    this.group.add(this.shell);
+    this.buildTanks();
+    this.group.add(this.shell, this.still, this.shine);
+    this.still.add(this.bowlWater(VESSELS.bowl.r));
+    // A curved streak of light on the glass, kept facing the camera (top left).
+    const streak = new THREE.Mesh(this.geo(new THREE.SphereGeometry(1.01, 16, 6, 0.5, 0.55, 0.5, 0.45)), this.mat('#ffffff', { transparent: true, opacity: 0.5, depthWrite: false }));
+    const dot = new THREE.Mesh(this.geo(new THREE.SphereGeometry(1.01, 8, 4, 1.25, 0.18, 0.95, 0.15)), this.mat('#ffffff', { transparent: true, opacity: 0.4, depthWrite: false }));
+    this.shine.add(streak, dot);
     this.rebuildFish();
     (window as unknown as { __fish: unknown }).__fish = this; // for poking from the console while testing
     // The menu opens just after arriving (arriving closes any open screen).
@@ -131,39 +147,49 @@ export class FishWorld implements Activity {
     return mesh;
   }
 
-  /** Slopes: a plank with a sloping top (and bottom), all merged into one mesh. */
+  /** Slopes: a plank with a sloping top (and bottom), merged into one mesh per surface. */
   private buildRamps(ramps: Ramp[]) {
-    if (!ramps.length) return;
-    const pos: number[] = [], col: number[] = [];
-    const c = new THREE.Color();
+    const bySurface = new Map<string, Ramp[]>();
     for (const r of ramps) {
-      c.set(r.color);
-      const T = Math.min(r.w, r.d) < 2 ? 0.3 : 0.6;
-      const x0 = r.x - r.w / 2, x1 = r.x + r.w / 2, z0 = r.z - r.d / 2, z1 = r.z + r.d / 2;
-      // Height of the top at each corner.
-      const h = (x: number, z: number) => (r.along === 'z' ? (z === z0 ? r.y0 : r.y1) : x === x0 ? r.y0 : r.y1);
-      const corner = (x: number, z: number, top: boolean): V3 => [x, h(x, z) - (top ? 0 : T), z];
-      const quad = (a: V3, b: V3, cc: V3, d: V3, shade: number) => {
-        for (const p of [a, b, cc, a, cc, d]) {
-          pos.push(...p);
-          col.push(c.r * shade, c.g * shade, c.b * shade);
-        }
-      };
-      const t = (x: number, z: number) => corner(x, z, true), u = (x: number, z: number) => corner(x, z, false);
-      quad(t(x0, z0), t(x0, z1), t(x1, z1), t(x1, z0), 1);
-      quad(u(x0, z0), u(x1, z0), u(x1, z1), u(x0, z1), 0.6);
-      quad(u(x0, z0), u(x0, z1), t(x0, z1), t(x0, z0), 0.8);
-      quad(u(x1, z0), t(x1, z0), t(x1, z1), u(x1, z1), 0.8);
-      quad(u(x0, z0), t(x0, z0), t(x1, z0), u(x1, z0), 0.7);
-      quad(u(x0, z1), u(x1, z1), t(x1, z1), t(x0, z1), 0.7);
+      const k = r.surface ?? '';
+      bySurface.set(k, [...(bySurface.get(k) ?? []), r]);
     }
-    const g = this.geo(new THREE.BufferGeometry());
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    g.computeVertexNormals();
-    const mesh = new THREE.Mesh(g, this.mat('#ffffff', { vertexColors: true, side: THREE.DoubleSide }));
-    mesh.castShadow = mesh.receiveShadow = true;
-    this.group.add(mesh);
+    for (const [surface, list] of bySurface) {
+      const pos: number[] = [], col: number[] = [], uv: number[] = [];
+      const c = new THREE.Color();
+      for (const r of list) {
+        c.set(r.color);
+        const T = Math.min(r.w, r.d) < 2 ? 0.3 : 0.6;
+        const x0 = r.x - r.w / 2, x1 = r.x + r.w / 2, z0 = r.z - r.d / 2, z1 = r.z + r.d / 2;
+        // Height of the top at each corner.
+        const h = (x: number, z: number) => (r.along === 'z' ? (z === z0 ? r.y0 : r.y1) : x === x0 ? r.y0 : r.y1);
+        const corner = (x: number, z: number, top: boolean): V3 => [x, h(x, z) - (top ? 0 : T), z];
+        // UVs in world units like the blocks: (x, z) on top and bottom, along the side and up on the sides.
+        const quad = (a: V3, b: V3, cc: V3, d: V3, shade: number, face: 'flat' | 'x' | 'z') => {
+          for (const p of [a, b, cc, a, cc, d]) {
+            pos.push(...p);
+            col.push(c.r * shade, c.g * shade, c.b * shade);
+            uv.push(...(face === 'flat' ? [p[0], -p[2]] : face === 'x' ? [p[2], p[1]] : [p[0], p[1]]));
+          }
+        };
+        const t = (x: number, z: number) => corner(x, z, true), u = (x: number, z: number) => corner(x, z, false);
+        quad(t(x0, z0), t(x0, z1), t(x1, z1), t(x1, z0), 1, 'flat');
+        quad(u(x0, z0), u(x1, z0), u(x1, z1), u(x0, z1), 0.6, 'flat');
+        quad(u(x0, z0), u(x0, z1), t(x0, z1), t(x0, z0), 0.8, 'x');
+        quad(u(x1, z0), t(x1, z0), t(x1, z1), u(x1, z1), 0.8, 'x');
+        quad(u(x0, z0), t(x0, z0), t(x1, z0), u(x1, z0), 0.7, 'z');
+        quad(u(x0, z1), u(x1, z1), t(x1, z1), t(x0, z1), 0.7, 'z');
+      }
+      const g = this.geo(new THREE.BufferGeometry());
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      g.computeVertexNormals();
+      const map = surface ? surfaceTex(surface as Surface) : undefined;
+      const mesh = new THREE.Mesh(g, this.mat('#ffffff', { vertexColors: true, side: THREE.DoubleSide, map }));
+      mesh.castShadow = mesh.receiveShadow = true;
+      this.group.add(mesh);
+    }
   }
 
   /** Goo, hot pipes and sparks glow; small ways out get a swirly blue glow. */
@@ -172,7 +198,13 @@ export class FishWorld implements Activity {
       if (b.kind !== 'zone' || !b.tag) continue;
       if (HAZARD_TAGS.has(b.tag) && b.tag !== 'drop') {
         const goo = b.tag === 'goo';
-        const mat = this.mat(goo ? '#69db7c' : '#ff6b6b', { emissive: goo ? '#2b8a3e' : '#c92a2a', transparent: true, opacity: goo ? 0.92 : 0.85 });
+        // Bubbly blobs, one repeat every 2 units, slowly flowing.
+        const map = gooTex().clone();
+        map.needsUpdate = true;
+        map.repeat.set(Math.max(1, b.w / 2), Math.max(1, b.d / 2));
+        this.disposables.push(map);
+        this.scrolling.push({ tex: map, speed: goo ? 0.12 : 0.6 });
+        const mat = this.mat(goo ? '#5fd35f' : '#ff6b3d', { map, emissive: goo ? '#1f6b2a' : '#c92a2a', transparent: true, opacity: goo ? 0.94 : 0.9 });
         const mesh = new THREE.Mesh(this.geo(new THREE.BoxGeometry(b.w, b.h, b.d)), mat);
         mesh.position.set(b.x, b.y, b.z);
         this.group.add(mesh);
@@ -196,9 +228,14 @@ export class FishWorld implements Activity {
     }
   }
 
-  /** The buyer in the pet store, and the sea in the last level. */
+  /** The buyer in the pet store (and more bowls for sale), and the sea in the last level. */
   private buildExtras() {
     if (this.f.house) {
+      for (const x of [-1.3, 1.3]) {
+        const bowl = this.vesselModel('bowl', true, true);
+        bowl.position.set(x, 2.6, -3.9);
+        this.group.add(bowl);
+      }
       const r = randomRider();
       r.root.position.set(4, 0, 30.5);
       r.root.rotation.y = Math.PI;
@@ -206,29 +243,124 @@ export class FishWorld implements Activity {
       this.people.push(r);
     }
     if (this.f.level.id === 'fish7') {
-      const sea = new THREE.Mesh(this.geo(new THREE.PlaneGeometry(800, 800).rotateX(-Math.PI / 2)), this.mat('#1c7ed6'));
+      const map = waveTex().clone();
+      map.needsUpdate = true;
+      map.repeat.set(60, 60);
+      this.disposables.push(map);
+      this.scrolling.push({ tex: map, speed: 0.01 });
+      const sea = new THREE.Mesh(
+        this.geo(new THREE.PlaneGeometry(800, 800).rotateX(-Math.PI / 2)),
+        new THREE.MeshPhongMaterial({ color: '#1c7ed6', map, shininess: 80, specular: 0x88bbff }),
+      );
+      this.disposables.push(sea.material as THREE.Material);
       sea.position.y = -11.8;
       sea.receiveShadow = true;
       this.group.add(sea);
     }
   }
 
+  /** Inside every aquarium (solid blocks with the 'tank' surface): gravel, weed, bubbles and a few fish. */
+  private buildTanks() {
+    const gravel = this.mat('#d9a066', { map: surfaceTex('sand') });
+    const weed = [this.mat('#2f9e44'), this.mat('#66a80f')];
+    const bubble = this.mat('#ffffff', { transparent: true, opacity: 0.7, emissive: '#5c7cfa', emissiveIntensity: 0.3 });
+    const bubbleGeo = this.geo(new THREE.SphereGeometry(0.06, 8, 6));
+    let n = 0;
+    for (const b of this.f.level.blocks) {
+      if (b.surface !== 'tank' || b.deco || Math.min(b.w, b.d) < 1 || b.h < 1.5) continue;
+      const bottom = b.y - b.h / 2, along = b.d >= b.w ? 'z' : 'x';
+      const long = Math.max(b.w, b.d), short = Math.min(b.w, b.d);
+      const g = this.part(this.group, b.w - 0.1, 0.3, b.d - 0.1, b.x, bottom + 0.15, b.z, gravel);
+      g.castShadow = false;
+      // Weed: tall leaves at a few spots along the back.
+      for (let i = 0; i < Math.round(long / 2); i++) {
+        const a = -long / 2 + 0.8 + (i * (long - 1.6)) / Math.max(1, Math.round(long / 2) - 1);
+        const across = ((i % 2) - 0.5) * short * 0.4;
+        for (let k = 0; k < 3; k++) {
+          const hgt = b.h * (0.35 + ((i + k) % 3) * 0.12);
+          const leaf = this.part(this.group, 0.08, hgt, 0.08, 0, bottom + 0.3 + hgt / 2, 0, weed[(i + k) % 2]);
+          leaf.position.x = b.x + (along === 'x' ? a : across) + (k - 1) * 0.12;
+          leaf.position.z = b.z + (along === 'z' ? a : across) + (k - 1) * 0.07;
+          leaf.rotation.z = (k - 1) * 0.15;
+          leaf.castShadow = false;
+        }
+      }
+      // A few fish of different kinds.
+      for (let i = 0; i < Math.max(2, Math.round(long / 3)); i++, n++) {
+        const mesh = this.fishModel(FISHES[n % FISHES.length]);
+        mesh.scale.setScalar(Math.min(1.1, short * 0.6));
+        this.group.add(mesh);
+        this.tankFish.push({
+          mesh, x: b.x + (along === 'x' ? 0 : ((i % 3) - 1) * short * 0.2), z: b.z + (along === 'z' ? 0 : ((i % 3) - 1) * short * 0.2),
+          y: bottom + 0.8 + ((i * 0.37) % 1) * (b.h - 1.3), along, reach: long / 2 - 0.6, speed: 0.35 + ((n * 0.13) % 0.3), phase: n * 1.9,
+        });
+      }
+      // A stream of bubbles from one end.
+      const bx = b.x + (along === 'x' ? -long / 2 + 0.4 : 0), bz = b.z + (along === 'z' ? -long / 2 + 0.4 : 0);
+      for (let i = 0; i < 6; i++) {
+        const mesh = new THREE.Mesh(bubbleGeo, bubble);
+        this.group.add(mesh);
+        this.bubbles.push({ mesh, x: bx, z: bz, y0: bottom + 0.3, h: b.h - 0.4, phase: i / 6 });
+      }
+    }
+  }
+
+  /** See-through glass: nearly clear face-on, brighter towards the edges (like real glass), so the shape reads. */
+  private glassMat(tint: string) {
+    const m = new THREE.ShaderMaterial({
+      uniforms: { tint: { value: new THREE.Color(tint) } },
+      vertexShader: `varying vec3 vN; varying vec3 vV;
+        void main() {
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vN = normalize(normalMatrix * normal);
+          vV = normalize(-mv.xyz);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: `uniform vec3 tint; varying vec3 vN; varying vec3 vV;
+        void main() {
+          float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0);
+          gl_FragColor = vec4(mix(tint, vec3(1.0), f * 0.7), 0.06 + f * 0.75);
+        }`,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    this.disposables.push(m);
+    return m;
+  }
+
+  /** The water in a bowl: the bottom of a sphere with a flat top, which stays level while the bowl rolls. */
+  private bowlWater(r: number) {
+    const g = new THREE.Group();
+    const cut = 1.0; // where the water's surface is, as an angle down from the top
+    g.add(new THREE.Mesh(this.geo(new THREE.SphereGeometry(r * 0.94, 24, 12, 0, Math.PI * 2, cut, Math.PI - cut)), this.mat('#339af0', { transparent: true, opacity: 0.3, depthWrite: false })));
+    const top = new THREE.Mesh(this.geo(new THREE.CircleGeometry(r * 0.94 * Math.sin(cut), 24).rotateX(-Math.PI / 2)), this.mat('#a5d8ff', { transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide }));
+    top.position.y = r * 0.94 * Math.cos(cut);
+    g.add(top);
+    return g;
+  }
+
   /** A fish bowl, water bottle or bucket. Standing up (to jump into), or lying down to roll (along x). */
   private vesselModel(v: Vessel, full: boolean, standing: boolean) {
     const g = new THREE.Group();
     const r = VESSELS[v].r;
-    const glass = this.mat('#e7f5ff', { transparent: true, opacity: 0.16, depthWrite: false });
-    const water = this.mat('#74c0fc', { transparent: true, opacity: 0.18, depthWrite: false });
+    const glass = this.glassMat('#d0ebff');
+    const water = this.mat('#339af0', { transparent: true, opacity: 0.3, depthWrite: false });
     if (v === 'bowl') {
-      const shellG = new THREE.Mesh(this.geo(new THREE.SphereGeometry(r, 20, 14)), glass);
-      g.add(shellG);
-      if (full) g.add(new THREE.Mesh(this.geo(new THREE.SphereGeometry(r * 0.86, 16, 12)), water));
-      const rim = new THREE.Mesh(this.geo(new THREE.TorusGeometry(r * 0.55, 0.06, 6, 20).rotateX(Math.PI / 2)), this.mat('#a5d8ff'));
-      rim.position.y = r * 0.82;
+      g.add(new THREE.Mesh(this.geo(new THREE.SphereGeometry(r, 32, 20)), glass));
+      if (full) g.add(this.bowlWater(r));
+      const rim = new THREE.Mesh(this.geo(new THREE.TorusGeometry(r * 0.55, 0.05, 8, 28).rotateX(Math.PI / 2)), this.glassMat('#a5d8ff'));
+      rim.position.y = r * 0.84;
       g.add(rim);
-      // A couple of pebbles so you can see it roll.
-      for (const [x, y, z, c] of [[0.25, -0.55, 0.1, '#ff922b'], [-0.2, -0.56, -0.15, '#cc5de8'], [0.05, -0.58, -0.3, '#51cf66']] as const) {
-        this.part(g, 0.16, 0.12, 0.16, x * r / 0.7, y * r / 0.7, z * r / 0.7, this.mat(c));
+      // Coloured gravel in the bottom, so you can see it roll.
+      const cols = ['#ff922b', '#cc5de8', '#51cf66', '#339af0', '#fcc419'];
+      const pebble = this.geo(new THREE.IcosahedronGeometry(0.07, 0));
+      for (let i = 0; i < 14; i++) {
+        const a = i * 2.4, d = 0.12 + ((i * 0.37) % 1) * 0.3;
+        const m = new THREE.Mesh(pebble, this.mat(cols[i % cols.length]));
+        m.position.set(Math.cos(a) * d * r, -r * 0.82 + d * d * r * 0.9, Math.sin(a) * d * r);
+        m.rotation.set(i, i * 2, 0);
+        g.add(m);
       }
       if (!standing) return g;
       const wrap = new THREE.Group();
@@ -240,16 +372,30 @@ export class FishWorld implements Activity {
     const bottle = v === 'bottle';
     const rad = bottle ? r * 0.8 : r, len = bottle ? r * 2.6 : r * 1.5;
     const body = new THREE.Group();
-    body.add(new THREE.Mesh(this.geo(new THREE.CylinderGeometry(rad, bottle ? rad : rad * 0.85, len, 18, 1, !bottle)), glass));
-    if (!bottle) (body.children[0] as THREE.Mesh).material = this.mat('#fab005', { transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
-    if (full) body.add(new THREE.Mesh(this.geo(new THREE.CylinderGeometry(rad * 0.9, rad * 0.9 * (bottle ? 1 : 0.85), len * 0.85, 14)), water));
+    const shellMat = bottle ? glass : this.mat('#fab005', { transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide });
+    body.add(new THREE.Mesh(this.geo(new THREE.CylinderGeometry(rad, bottle ? rad : rad * 0.85, len, 24, 1, !bottle)), shellMat));
+    if (full) body.add(new THREE.Mesh(this.geo(new THREE.CylinderGeometry(rad * 0.9, rad * 0.9 * (bottle ? 1 : 0.85), len * 0.85, 20)), water));
     if (bottle) {
-      this.part(body, rad * 0.8, len * 0.12, rad * 0.8, 0, len * 0.56, 0, this.mat('#1c7ed6'));
-      this.part(body, rad * 2.05, len * 0.3, rad * 2.05, 0, 0, 0, this.mat('#ffffff', { transparent: true, opacity: 0.8 }));
+      // Shoulders, a blue cap, and a label round the middle.
+      const neck = new THREE.Mesh(this.geo(new THREE.CylinderGeometry(rad * 0.45, rad, len * 0.14, 24, 1, true)), glass);
+      neck.position.y = len / 2 + len * 0.07;
+      body.add(neck);
+      const cap = new THREE.Mesh(this.geo(new THREE.CylinderGeometry(rad * 0.42, rad * 0.42, len * 0.1, 16)), new THREE.MeshPhongMaterial({ color: '#1c7ed6', shininess: 60 }));
+      this.disposables.push(cap.material as THREE.Material);
+      cap.position.y = len / 2 + len * 0.18;
+      body.add(cap);
+      const label = new THREE.Mesh(this.geo(new THREE.CylinderGeometry(rad * 1.01, rad * 1.01, len * 0.3, 24, 1, true)), this.mat('#e7f5ff', { side: THREE.DoubleSide }));
+      body.add(label);
+      const stripe = new THREE.Mesh(this.geo(new THREE.CylinderGeometry(rad * 1.02, rad * 1.02, len * 0.08, 24, 1, true)), this.mat('#228be6', { side: THREE.DoubleSide }));
+      body.add(stripe);
     } else {
-      const handle = new THREE.Mesh(this.geo(new THREE.TorusGeometry(rad * 0.95, 0.04, 5, 16, Math.PI)), this.mat('#868e96'));
+      const handle = new THREE.Mesh(this.geo(new THREE.TorusGeometry(rad * 0.95, 0.04, 6, 20, Math.PI)), new THREE.MeshPhongMaterial({ color: '#adb5bd', shininess: 80 }));
+      this.disposables.push(handle.material as THREE.Material);
       handle.position.y = len / 2;
       body.add(handle);
+      const lip = new THREE.Mesh(this.geo(new THREE.TorusGeometry(rad, 0.05, 6, 24).rotateX(Math.PI / 2)), this.mat('#f08c00'));
+      lip.position.y = len / 2;
+      body.add(lip);
     }
     if (standing) {
       body.position.y = len / 2;
@@ -260,32 +406,84 @@ export class FishWorld implements Activity {
     return g;
   }
 
-  /** Blocky fish, facing +z. */
+  /** One material per colour for the fish, with a little glow so the colours still show through glass and water. */
+  private fishMats = new Map<string, THREE.Material>();
+  private fishMat(c: string) {
+    let m = this.fishMats.get(c);
+    if (!m) {
+      m = new THREE.MeshPhongMaterial({ color: c, emissive: new THREE.Color(c).multiplyScalar(0.35), shininess: 60, specular: 0x444444, side: THREE.DoubleSide });
+      this.disposables.push(m);
+      this.fishMats.set(c, m);
+    }
+    return m;
+  }
+
+  /** A rounded fish, facing +z: an egg-shaped body with its markings, a tail that swishes, fins and big eyes. */
   private fishModel(d: FishDef) {
     const g = new THREE.Group();
-    // A little glow so the colours still show through the glass and water.
-    const bright = (c: string) => this.mat(c, { emissive: new THREE.Color(c).multiplyScalar(0.45) });
-    const body = bright(d.body), stripe = bright(d.stripe), fin = bright(d.fin), eye = this.mat('#111111'), white = bright('#ffffff');
-    const puffer = d.id === 'puffer';
-    const [w, h, l] = puffer ? [0.4, 0.4, 0.44] : d.id === 'bass' ? [0.24, 0.3, 0.6] : [0.22, 0.3, 0.5];
-    this.part(g, w, h, l, 0, 0, 0, body);
-    if (d.id === 'clown') for (const z of [0.12, -0.1]) this.part(g, w + 0.02, h + 0.02, 0.06, 0, 0, z, stripe);
-    else if (d.id === 'bass') this.part(g, w + 0.02, 0.06, l * 0.8, 0, 0, 0, stripe);
-    else if (d.id === 'tang') this.part(g, w + 0.02, h * 0.5, l * 0.4, 0, 0.04, 0.02, stripe);
-    else if (d.id === 'shark') this.part(g, w + 0.01, h * 0.35, l * 0.9, 0, -h * 0.35, 0.02, stripe);
+    const ball = this.sphereGeo ??= this.geo(new THREE.SphereGeometry(1, 20, 14));
+    const blob = (rx: number, ry: number, rz: number, x: number, y: number, z: number, c: string) => {
+      const m = new THREE.Mesh(ball, this.fishMat(c));
+      m.scale.set(rx, ry, rz);
+      m.position.set(x, y, z);
+      g.add(m);
+      return m;
+    };
+    const fin = (pts: [number, number][], c: string) => {
+      const shape = new THREE.Shape(pts.map(([a, b]) => new THREE.Vector2(a, b)));
+      const m = new THREE.Mesh(this.geo(new THREE.ShapeGeometry(shape).rotateY(-Math.PI / 2)), this.fishMat(c)); // points are (z, y)
+      g.add(m);
+      return m;
+    };
+    const puffer = d.id === 'puffer', shark = d.id === 'shark';
+    // Half-sizes across (x), up (y) and along (z).
+    const [w, h, l] = puffer ? [0.22, 0.22, 0.24] : d.id === 'bass' ? [0.12, 0.16, 0.32] : shark ? [0.12, 0.13, 0.34] : [0.11, 0.16, 0.26];
+    blob(w, h, l, 0, 0, 0, d.body);
+    // Markings: slices of a slightly bigger egg, so they wrap round the body.
+    const band = (z: number, width: number) => {
+      const k = Math.sqrt(Math.max(0, 1 - (z / l) ** 2));
+      blob(w * k * 1.04, h * k * 1.04, width, 0, 0, z, d.stripe);
+      blob(w * k * 1.05, h * k * 1.05, width * 0.35, 0, 0, z - width, d.fin); // the dark edge
+    };
+    if (d.id === 'clown') {
+      band(l * 0.35, 0.04);
+      band(-l * 0.25, 0.045);
+    } else if (d.id === 'bass') blob(w * 1.03, h * 0.18, l * 0.85, 0, 0, 0, d.stripe);
+    else if (d.id === 'tang') blob(w * 1.03, h * 0.45, l * 0.5, 0, h * 0.15, -l * 0.05, d.stripe);
+    else if (shark) blob(w * 1.02, h * 0.55, l * 0.9, 0, -h * 0.45, 0.02, d.stripe);
+    else if (d.id === 'gold') blob(w * 1.02, h * 0.6, l * 0.7, 0, -h * 0.35, l * 0.1, d.stripe);
     if (puffer) {
-      for (const [x, y, z] of [[0.22, 0, 0], [-0.22, 0, 0], [0, 0.22, 0], [0, -0.22, 0], [0.15, 0.15, 0.1], [-0.15, 0.15, -0.1], [0.15, -0.15, -0.1], [-0.15, -0.15, 0.1]]) {
-        this.part(g, 0.06, 0.06, 0.06, x, y, z, stripe);
+      const spike = this.geo(new THREE.ConeGeometry(0.025, 0.08, 5));
+      for (let i = 0; i < 18; i++) {
+        const t = Math.acos(1 - (2 * (i + 0.5)) / 18), p = i * 2.4;
+        const dir = new THREE.Vector3(Math.sin(t) * Math.cos(p), Math.cos(t), Math.sin(t) * Math.sin(p));
+        if (dir.z > 0.75) continue; // not on its face
+        const m = new THREE.Mesh(spike, this.fishMat(d.stripe));
+        m.position.copy(dir).multiplyScalar(0.22);
+        m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+        g.add(m);
       }
     }
-    // Tail, fins and eyes.
-    const tail = this.part(g, 0.04, h * 0.9, 0.2, 0, 0, -l / 2 - 0.08, fin);
+    // The tail (it swishes from its root), the top fin and the little side fins.
+    const tail = new THREE.Group();
     tail.name = 'tail';
-    this.part(g, 0.03, d.id === 'shark' ? 0.22 : 0.1, 0.16, 0, h / 2 + (d.id === 'shark' ? 0.1 : 0.04), -0.02, fin);
+    tail.position.z = -l * 0.9;
+    g.add(tail);
+    const tl = shark ? 0.2 : 0.16, th = shark ? 0.16 : 0.13;
+    const tailFin = fin(shark ? [[0, 0], [-tl, th], [-tl * 0.6, 0], [-tl * 0.8, -th * 0.6]] : [[0, 0], [-tl, th], [-tl * 0.75, 0], [-tl, -th]], d.fin);
+    tailFin.removeFromParent();
+    tail.add(tailFin);
+    if (shark) fin([[l * 0.3, h * 0.8], [-l * 0.1, h * 2.1], [-l * 0.35, h * 0.8]], d.fin);
+    else fin([[l * 0.4, h * 0.8], [l * 0.1, h * 1.45], [-l * 0.5, h * 1.25], [-l * 0.6, h * 0.6]], d.fin);
     for (const s of [-1, 1]) {
-      this.part(g, 0.02, 0.08, 0.08, s * (w / 2 + 0.01), 0.04, l / 2 - 0.1, white);
-      this.part(g, 0.025, 0.045, 0.045, s * (w / 2 + 0.02), 0.04, l / 2 - 0.09, eye);
+      const side = blob(0.012, h * 0.35, l * 0.25, s * w * 0.95, -h * 0.35, l * 0.05, d.fin);
+      side.rotation.y = s * 0.5;
+      // Eyes: white, then a black pupil with a glint.
+      blob(w * 0.35, 0.055, 0.055, s * w * 0.78, h * 0.25, l * 0.6, '#ffffff');
+      blob(0.02, 0.033, 0.033, s * (w * 0.78 + w * 0.3), h * 0.26, l * 0.63, '#111111');
+      blob(0.008, 0.011, 0.011, s * (w * 0.78 + w * 0.34), h * 0.31, l * 0.66, '#ffffff');
     }
+    g.traverse((o) => (o.castShadow = true));
     return g;
   }
 
@@ -301,7 +499,7 @@ export class FishWorld implements Activity {
     if (v === this.shellVessel) return;
     this.shellVessel = v;
     this.shell.clear();
-    if (v) this.shell.add(this.vesselModel(v, true, false));
+    if (v) this.shell.add(this.vesselModel(v, v !== 'bowl', false)); // a bowl's water is in `still`
     this.rollAngle = 0;
     this.shell.quaternion.identity();
   }
@@ -503,6 +701,16 @@ export class FishWorld implements Activity {
     }
     for (const h of this.hazards) h.mat.emissiveIntensity = h.tag === 'goo' ? 0.8 + Math.sin(t * 3) * 0.2 : 0.7 + Math.sin(t * 12) * 0.3;
     for (const e of this.exits) e.rotation.y = t * 2;
+    for (const sc of this.scrolling) sc.tex.offset.set(t * sc.speed * 0.4, t * sc.speed);
+    for (const f of this.tankFish) {
+      const k = Math.sin(t * f.speed + f.phase); // swims back and forth, turning round at each end
+      const dir = Math.cos(t * f.speed + f.phase) > 0 ? 1 : -1;
+      f.mesh.position.set(f.along === 'x' ? f.x + k * f.reach : f.x, f.y + Math.sin(t * 1.7 + f.phase) * 0.12, f.along === 'z' ? f.z + k * f.reach : f.z);
+      f.mesh.rotation.y = f.along === 'z' ? (dir > 0 ? 0 : Math.PI) : dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+      const tail = f.mesh.getObjectByName('tail');
+      if (tail) tail.rotation.y = Math.sin(t * 10 + f.phase) * 0.5;
+    }
+    for (const bb of this.bubbles) bb.mesh.position.set(bb.x + Math.sin(t * 3 + bb.phase) * 0.05, bb.y0 + ((t * 0.5 + bb.phase) % 1) * bb.h, bb.z);
     // Roll the shell.
     this.syncShell();
     const sp = Math.hypot(s.vel[0], s.vel[2]);
@@ -571,6 +779,12 @@ export class FishWorld implements Activity {
     const s = this.sim, p = this.prev;
     const at: V3 = [p[0] + (s.pos[0] - p[0]) * alpha, p[1] + (s.pos[1] - p[1]) * alpha, p[2] + (s.pos[2] - p[2]) * alpha];
     this.shell.position.set(...at);
+    this.still.position.set(...at);
+    this.still.visible = s.vessel === 'bowl';
+    this.shine.position.set(...at);
+    this.shine.quaternion.copy(this.ctx.camera.quaternion);
+    this.shine.scale.setScalar(s.r);
+    this.shine.visible = s.vessel === 'bowl' || s.vessel === 'bottle';
     const fm = this.fishMesh;
     const scale = s.vessel === 'bottle' ? 1.1 : 1.5;
     fm.scale.setScalar(scale);

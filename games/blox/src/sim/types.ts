@@ -44,7 +44,12 @@ export interface Block {
   see?: boolean;
   /** Just for looks (trees, flowers, signs): drawn but never touched. */
   deco?: boolean;
+  /** What it's made of (plain blocks only): drawn with that texture instead of the usual tile. */
+  surface?: Surface;
 }
+
+/** Textures for plain blocks, tinted by the block's colour. */
+export type Surface = 'wood' | 'carpet' | 'brick' | 'stone' | 'road' | 'metal' | 'pipe' | 'grass' | 'sand' | 'smooth' | 'tank' | 'roof';
 
 export interface Level {
   id: string;
@@ -70,4 +75,6 @@ export interface Level {
   signs?: { at: V3; text: string; color: string; size?: number }[];
   /** Waypoints a robot can walk through to the finish (for the tests); `wait` = wait here until the way is clear. */
   route?: { to: V3; wait?: boolean }[];
+  /** Leave out the blocky clouds (indoors and underground). */
+  noClouds?: boolean;
 }

@@ -2,12 +2,14 @@
 // portals, lava, belts) in step with the Sim each frame.
 import * as THREE from 'three';
 import type { Sim } from '../sim/physics';
-import type { Block, Kind, Level } from '../sim/types';
+import type { Block, Kind, Level, Surface } from '../sim/types';
 import { LEVELS } from '../sim/levels';
 import { BoxBatch } from './boxes';
-import { beltTex, bounceTex, checkerTex, doorTex, grateTex, labelTex, lavaTex, portalTex, speedTex, tileTex } from './textures';
+import { beltTex, bounceTex, checkerTex, doorTex, grateTex, labelTex, lavaTex, portalTex, speedTex, surfaceTex, tileTex } from './textures';
 
-type Look = 'tile' | 'lava' | 'bounce' | 'speed' | 'finish' | 'belt' | 'grate' | 'door';
+type Look = 'tile' | 'lava' | 'bounce' | 'speed' | 'finish' | 'belt' | 'grate' | 'door' | Surface;
+/** Surfaces with a bit of shine. */
+const SHINY = new Set<Look>(['metal', 'pipe', 'smooth']);
 const LOOK: Record<Kind, Look> = {
   solid: 'tile', checkpoint: 'tile', vanish: 'tile', portal: 'tile', shop: 'tile', crawl: 'tile', spot: 'tile', zone: 'tile',
   lava: 'lava', bounce: 'bounce', speed: 'speed', finish: 'finish', conveyor: 'belt', door: 'door',
@@ -38,8 +40,20 @@ function material(look: Look) {
       return new THREE.MeshLambertMaterial({ vertexColors: true, map: grateTex(), transparent: true, alphaTest: 0.4, side: THREE.DoubleSide });
     case 'door':
       return new THREE.MeshLambertMaterial({ vertexColors: true, map: doorTex() });
-    default:
+    case 'tile':
       return new THREE.MeshLambertMaterial({ vertexColors: true, map: tileTex() });
+    default:
+      // Aquarium glass: see-through, so the fish inside show.
+      if (look === 'tank') {
+        return new THREE.MeshPhongMaterial({
+          vertexColors: true, map: surfaceTex(look), shininess: 120, specular: 0x666666, emissive: 0x0b3a5a, transparent: true, opacity: 0.55, depthWrite: false,
+        });
+      }
+      if (SHINY.has(look)) {
+        const spec = { smooth: [30, 0x222222], metal: [50, 0x444444], pipe: [70, 0x806040] }[look as 'smooth' | 'metal' | 'pipe'];
+        return new THREE.MeshPhongMaterial({ vertexColors: true, map: surfaceTex(look), shininess: spec[0], specular: spec[1] });
+      }
+      return new THREE.MeshLambertMaterial({ vertexColors: true, map: surfaceTex(look) });
   }
 }
 
@@ -77,7 +91,7 @@ export class WorldView {
     level.blocks.forEach((b, i) => {
       if (NOT_BOXES.has(b.kind)) return; // drawn below, or not at all
       color.set(b.color);
-      const look = b.see ? 'grate' : LOOK[b.kind];
+      const look: Look = b.see ? 'grate' : LOOK[b.kind] === 'tile' && b.surface ? b.surface : LOOK[b.kind];
       if (b.kind === 'door') this.doors.set(i, 0);
       if (b.move || b.kind === 'vanish' || b.kind === 'door') {
         const one = new BoxBatch();
@@ -122,7 +136,7 @@ export class WorldView {
         this.texs.push((mat as THREE.MeshBasicMaterial).map!);
       }
       const mesh = new THREE.Mesh(this.trackGeo(batch.geometry()), mat);
-      mesh.castShadow = look !== 'lava';
+      mesh.castShadow = look !== 'lava' && look !== 'tank';
       mesh.receiveShadow = true;
       this.group.add(mesh);
     }
@@ -251,6 +265,7 @@ export class WorldView {
       this.group.add(water);
     }
     // Puffy blocky clouds around and below the course.
+    if (this.level.noClouds) return;
     const clouds = new BoxBatch();
     color.set('#ffffff');
     const bounds = new THREE.Box3();

@@ -7,7 +7,9 @@ Run commands from the repo root (see the root `CLAUDE.md`); this game's tests: `
 
 - `src/sim/`: plain data and rules, **no three.js or DOM**, so it all runs in the Node tests.
   - `types.ts`: `Block` (a box with a `kind`: solid, lava, bounce, speed, checkpoint, finish, conveyor,
-    vanish, portal, shop; optional `move`, `push`, `level`, `deco`) and `Level`.
+    vanish, portal, shop; optional `move`, `push`, `level`, `deco`, and `surface`: wood, brick, road, metal, pipe,
+    tank (see-through aquarium glass)… drawn with that texture instead of the obby tile) and `Level` (`noClouds`
+    for indoor levels).
   - `physics.ts`: `Sim`, the player in a world of boxes. Fixed 60 Hz `step(input)` returns events (`coin`,
     `oops`, `finish`, `portal`…). Collisions are AABB, resolved one axis at a time (y, then x, then z), with
     step-up onto low ledges, coyote time, jump buffering, moving platforms that carry you, and vanish timers.
