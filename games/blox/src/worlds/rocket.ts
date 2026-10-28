@@ -9,7 +9,7 @@ import {
 } from '../sim/rocket';
 import { LEVELS } from '../sim/levels';
 import type { Rig } from '../view/avatar';
-import { BoxBatch } from '../view/boxes';
+import { BoxBatch } from '../../../../shared/boxes';
 import { sfx } from '../ui/sfx';
 import type { Action, Activity, CamView, WorldCtx } from './activity';
 

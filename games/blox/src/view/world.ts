@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import type { Sim } from '../sim/physics';
 import type { Block, Kind, Level, Surface } from '../sim/types';
 import { LEVELS } from '../sim/levels';
-import { BoxBatch } from './boxes';
+import { BoxBatch } from '../../../../shared/boxes';
 import { beltTex, bounceTex, checkerTex, doorTex, grateTex, labelTex, lavaTex, portalTex, speedTex, surfaceTex, tileTex } from './textures';
 
 type Look = 'tile' | 'lava' | 'bounce' | 'speed' | 'finish' | 'belt' | 'grate' | 'door' | Surface;

@@ -1,4 +1,4 @@
-// A burst of coloured confetti blocks (for finishing an obby).
+// A burst of coloured confetti blocks for finishing a level (Llama-blox, Speed Run AM).
 import * as THREE from 'three';
 
 const N = 120;

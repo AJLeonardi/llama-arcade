@@ -12,7 +12,7 @@ one deploy (GitHub Pages).
 - **To make a new game, use the `/new-game` skill** (`.claude/skills/new-game/SKILL.md`). It has the
   rules every game follows.
 - **Each game has its own `CLAUDE.md`** (`games/drive/CLAUDE.md`, `games/rocket/CLAUDE.md`,
-  `games/blox/CLAUDE.md`). When working on one game, read only that game's folder (plus `shared/` if it
+  `games/blox/CLAUDE.md`, `games/speed-run-am/CLAUDE.md`). When working on one game, read only that game's folder (plus `shared/` if it
   uses something from there).
 
 ## Commands
@@ -55,6 +55,15 @@ any `games/<id>/game.json` becomes a tile. Adding a game needs no config changes
 - `storage.ts`: `gameStorage(id)`: localStorage under `llama-arcade/<id>/<key>`. Games must not use
   localStorage directly, since every game shares the site's storage.
 - `home.ts`: `goToArcade()`.
+- For the blocky 3D games (Llama-blox, Speed Run AM; Llama Drive has its own versions):
+  - `boxes.ts`: `BoxBatch` merges many boxes into one geometry (vertex colours, world-sized UVs).
+  - `controls.ts`: `Controls`, the touch joystick + look-drag + jump button + keyboard. The game's CSS
+    styles `.stick-base` / `.stick-knob`.
+  - `textures.ts`: `canvasTexture()`, `once()` (make a texture once), and `tileTex`, `beltTex`,
+    `checkerTex`, `gooTex`, `labelTex`.
+  - `confetti.ts`: `Confetti`, the finish burst.
+  - `sfx.ts`: `unlock()` (call on the first tap) and `tone()`, one WebAudio note. Each game keeps its own
+    list of sounds made from `tone()`.
 - `sw.js`: the service worker template. The build writes it to `dist/sw.js` with the build number in
   the cache name (`vite.config.ts:deployFiles`), so each deploy starts a fresh offline cache. Pages are
   network-first, everything else cache-first, and `version.json` is never cached.

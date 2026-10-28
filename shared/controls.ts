@@ -1,5 +1,7 @@
-// Touch: a joystick wherever the left thumb lands, drag on the right half to look around, and a big jump
-// button. Mac: WASD or arrow keys, space to jump, drag the mouse or Q/E to look, scroll to zoom.
+// Touch controls for the 3D games (Llama-blox, Speed Run AM). Touch: a joystick wherever the left thumb lands,
+// drag on the right half to look around, and a big jump button.
+// Mac: WASD or arrow keys, space to jump, drag the mouse or Q/E to look, scroll to zoom.
+// The game's CSS styles the joystick (`.stick-base`, `.stick-knob`, `.on`).
 
 export class Controls {
   /** Wanted movement relative to the camera: x = right, y = forward, each -1..1. */

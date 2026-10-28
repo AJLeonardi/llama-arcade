@@ -1,3 +1,4 @@
+// Used by Llama-blox and Speed Run AM.
 // Builds one BufferGeometry out of many boxes, with per-box vertex colours and world-sized UVs (one texture
 // tile per unit, so a long block shows more tiles rather than a stretched one).
 import * as THREE from 'three';

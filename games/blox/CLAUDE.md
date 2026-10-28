@@ -35,15 +35,14 @@ Run commands from the repo root (see the root `CLAUDE.md`); this game's tests: `
     `tests/fish.test.ts`. The walker waits on a block up in the sky in these levels, hidden.
   - `shop.ts`: the outfit catalogue (`ITEMS`), `Save` (coins, owned, outfit, done), `fixSave`, `pick` (buy/wear).
 - `src/view/`: three.js.
-  - `boxes.ts`: `BoxBatch` merges many boxes into one geometry with vertex colours and world-sized UVs.
   - `world.ts`: `WorldView` builds a level. Static blocks are merged per look (tile, lava, bounce, speed,
     finish); moving/vanish blocks and belts are their own meshes; coins are one InstancedMesh. `update()`
     syncs them with the `Sim` each frame.
   - `avatar.ts`: `buildAvatar(outfit)` (llama or person, hat/glasses/cape) and `animate()`. Rebuilt on change.
-  - `textures.ts`: every texture drawn on canvas. `confetti.ts`: the finish burst.
-- `src/ui/`: `ui.ts` (HUD, menus, shop panel; DOM only written on change), `controls.ts` (floating touch
-  joystick on the left 45%, look-drag elsewhere, jump button, keyboard), `sfx.ts` (WebAudio beeps),
-  `style.css`.
+  - `textures.ts`: every texture drawn on canvas (the plain ones, and `canvasTexture`/`once`, now live in
+    `shared/textures.ts` and are re-exported here).
+- `src/ui/`: `ui.ts` (HUD, menus, shop panel; DOM only written on change), `sfx.ts` (the sound list, made
+  with `shared/sfx.ts`'s `tone()`), `style.css`.
 - `src/worlds/`: the worlds' own games, plugged into main.ts through `Activity` (`activity.ts`): context
   buttons, locking the player while riding/building, placing the avatar and the camera. `index.ts` maps level
   id → activity. `coaster.ts` (tracks, trains, wheel, riding cameras), `rocket.ts` (workshop panel, rocket
@@ -55,6 +54,9 @@ Run commands from the repo root (see the root `CLAUDE.md`); this game's tests: `
   loop (fixed-step sim + interpolated player), the follow camera (it tilts up, then pulls in, to see over walls:
   `keepInView`) and saving (`gameStorage('blox')`, key `save`; Rocket Lab keeps the rocket under key `rocket`).
   `window.__blox` exposes `sim`, `save`, `LEVELS` and `goTo(levelId)` for poking from the console.
+
+Shared with Speed Run AM, in `shared/`: `BoxBatch` (`boxes.ts`), `Controls` (`controls.ts`: floating touch
+joystick on the left 45%, look-drag elsewhere, jump button, keyboard), `Confetti`, the plain textures and `tone()`.
 
 ## Making levels
 

@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { COASTERS, Ride, Track, WHEEL_TIME, type CoasterDef, type TrackPoint } from '../sim/coaster';
 import type { V3 } from '../sim/types';
 import type { Rig } from '../view/avatar';
-import { BoxBatch } from '../view/boxes';
+import { BoxBatch } from '../../../../shared/boxes';
 import { sfx } from '../ui/sfx';
 import type { Action, Activity, CamView, WorldCtx } from './activity';
 import { randomRider, sit } from './npc';

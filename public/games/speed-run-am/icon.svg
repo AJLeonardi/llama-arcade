@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#f06aa8"/>
+  <rect y="360" width="512" height="152" fill="#8b5a3c"/>
+  <g fill="#fff" opacity="0.55">
+    <rect x="40" y="170" width="110" height="22" rx="11"/>
+    <rect x="20" y="230" width="140" height="22" rx="11"/>
+    <rect x="50" y="290" width="100" height="22" rx="11"/>
+  </g>
+  <text x="300" y="330" font-size="270" text-anchor="middle" font-family="Apple Color Emoji, Noto Color Emoji, sans-serif">🏃</text>
+  <text x="256" y="478" font-size="120" font-weight="900" text-anchor="middle" fill="#fff" font-family="Arial Rounded MT Bold, Arial, sans-serif">AM</text>
+</svg>
