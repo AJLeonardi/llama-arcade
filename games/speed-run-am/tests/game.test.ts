@@ -228,6 +228,53 @@ describe('every level', () => {
     }
   });
 
+  it('you can walk in through the poop climb door and jump onto the first step', () => {
+    for (const lv of levels.slice(0, 9)) {
+      const zone = lv.blocks.find((b) => b.tag === 'poop')!;
+      const sim = new Sim(lv);
+      sim.pos = [0, 0, zone.z - 3];
+      run(sim, 60, NORTH);
+      expect(sim.pos[2]).toBeGreaterThan(zone.z + 3); // through the door, into the middle of the room
+      // The first step is in a corner: run at it and jump.
+      const step = lv.blocks.filter((b) => b.w === 2.6 && b.d === 2.6 && b.z > zone.z).sort((a, b) => a.y - b.y)[0];
+      run(sim, 60 * 2, (s) => {
+        if (s.onGround && s.level.blocks[s.ground] === step) return NONE; // made it
+        const dx = step.x - s.pos[0], dz = step.z - s.pos[2], d = Math.hypot(dx, dz) || 1;
+        return { moveX: dx / d, moveZ: dz / d, jump: d < 2.5 && s.onGround };
+      });
+      expect(sim.onGround && sim.level.blocks[sim.ground] === step, `level ${lv.num}`).toBe(true);
+    }
+  });
+
+  it('a robot can climb every step to the top before the poop gets it', () => {
+    for (const lv of levels.slice(0, 9)) {
+      const zone = lv.blocks.find((b) => b.tag === 'poop')!;
+      const steps = lv.blocks.filter((b) => b.w === 2.6 && b.d === 2.6 && b.z > zone.z).sort((a, b) => a.y - b.y);
+      const deck = lv.blocks.find((b) => b.w === 12 && b.d === 3 && b.z > zone.z)!;
+      const sim = new Sim(lv);
+      sim.pos = [0, 0, zone.z - 3];
+      const ev = run(sim, 40, NORTH); // in through the door: the poop starts
+      let k = 0;
+      ev.push(
+        ...run(sim, 60 * 60, (s) => {
+          const target = steps[k] ?? deck;
+          if (s.onGround && s.level.blocks[s.ground] === target) {
+            if (target === deck) return NONE;
+            k++;
+            return NONE;
+          }
+          const tx = target === deck ? Math.max(-4, Math.min(4, s.pos[0])) : target.x;
+          const dx = tx - s.pos[0], dz = target.z - s.pos[2], d = Math.hypot(dx, dz) || 1;
+          const slow = Math.min(1, d / 0.8);
+          return { moveX: (dx / d) * slow, moveZ: (dz / d) * slow, jump: d < 3.2 && s.onGround };
+        }),
+      );
+      expect(has(ev, 'poop'), `level ${lv.num}`).toBe(true);
+      expect(has(ev, 'oops'), `level ${lv.num}`).toBe(false);
+      expect(sim.level.blocks[sim.ground], `level ${lv.num}`).toBe(deck);
+    }
+  });
+
   it('the poop climb steps are low enough to jump', () => {
     for (const lv of levels.slice(0, 9)) {
       const steps = lv.blocks.filter((b) => b.w === 2.6 && b.d === 2.6).map((b) => b.y + b.h / 2);

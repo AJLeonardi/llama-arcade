@@ -40,7 +40,9 @@ From `shared/`: `Controls`, `BoxBatch`, `Confetti`, plain textures, `tone()`/`un
 ## Tuning notes
 
 - A flat running jump at walking speed is ~5 units edge to edge (`MAX_GAP`); level jumps stay under 4.
-- Poop climb steps rise at most 1.6. The poop's speed is worked out from the number of steps.
+- Poop climb steps rise at most 1.6. The poop's speed is worked out from the number of steps. The doorway is
+  4.5 tall and the first step is in a corner: a step just inside a low doorway can't be jumped onto (you
+  bonk your head). Tests: a robot walks in and climbs every level's steps while the poop rises.
 - Maze walls are 3.2 tall so you can't jump over them; dead ends are `trap` pads 0.05 above the floor.
 - The workout room faces north (+z) at the doors; +x is on your left, so door 1 is at +x.
 

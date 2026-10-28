@@ -243,13 +243,14 @@ export function makeLevel(num: number): Level {
   B.span(6, 7, -1, H + 3, s0 - 1, s0 + 13, 'solid', wallC);
   B.span(-6, -2, -1, H + 3, s0 - 1, s0, 'solid', wallC);
   B.span(2, 6, -1, H + 3, s0 - 1, s0, 'solid', wallC);
-  B.span(-2, 2, 3, H + 3, s0 - 1, s0, 'solid', wallC);
+  B.span(-2, 2, 4.5, H + 3, s0 - 1, s0, 'solid', wallC); // a tall doorway
   B.span(-6, -2, -1, H + 3, s0 + 12, s0 + 13, 'solid', wallC);
   B.span(2, 6, -1, H + 3, s0 + 12, s0 + 13, 'solid', wallC);
   B.span(-2, 2, -1, H, s0 + 12, s0 + 13, 'solid', wallC);
-  // Steps round and round the walls, ending next to the top deck.
-  const ring: [number, number][] = [[0, -4], [4, -4], [4, 0], [4, 4], [0, 4], [-4, 4], [-4, 0], [-4, -4]];
-  let n = 3;
+  // Steps round and round the walls, starting in a corner (not in front of the doorway, where you'd bonk your
+  // head trying to get on it) and ending next to the top deck.
+  const ring: [number, number][] = [[4, -4], [4, 0], [4, 4], [0, 4], [-4, 4], [-4, 0], [-4, -4], [0, -4]];
+  let n = 2; // the last step is ring[1], next to the deck
   while ((H - 1.2) / n > 1.6) n += 8;
   const rise = (H - 1.2) / n;
   for (let i = 0; i < n; i++) {
@@ -257,7 +258,7 @@ export function makeLevel(num: number): Level {
     B.box(rx, (i + 1) * rise - 0.25, cz + rz, 2.6, 0.5, 2.6, 'solid', i % 2 ? BROWN : PINK, { keyboard: B.keys });
   }
   B.span(-6, 6, H - 0.5, H, s0 + 9, s0 + 12, 'solid', floorC, { keyboard: B.keys });
-  B.span(-2, 2, 0, 3, s0, s0 + 1.5, 'zone', '', { tag: 'poop' });
+  B.span(-2, 2, 0, 4.5, s0, s0 + 1.5, 'zone', '', { tag: 'poop' });
   const poopSpeed = H / (n * 1.7 + 4 - 0.4 * d);
   B.level.poops.push({ area: [-6, s0, 6, s0 + 12], y0: -1.5, y1: H - 0.6, speed: poopSpeed, delay: 3, tag: 'poop' });
   B.sign(0, 5, s0 + 11.9, 'CLIMB!', 1.6);
