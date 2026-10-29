@@ -3,10 +3,11 @@
 // any angle you see layers of leaves. The clump picture is painted at load time from a
 // photo of real leaves (public/textures/leaves_scrub.webp): hundreds of small leaves,
 // darker inside, lighter and sun-touched at the tips, on a few twigs.
+import { ASSETS } from '../util/assets';
 import * as THREE from 'three';
 import { mulberry32 } from '../util/math';
 
-const base = import.meta.env.BASE_URL;
+const base = ASSETS;
 const SIZE = 256;
 
 let material: THREE.MeshLambertMaterial | null = null;

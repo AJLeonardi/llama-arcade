@@ -11,12 +11,14 @@
 // link them, one in each corner. Each highway's height follows a smoothed version of the
 // land (never steeper than MAX_GRADE), and the land is cut and filled to meet it.
 // Lakes and radio towers dot the country, and there are towns: two just off a highway,
-// and Washington DC with roads in from three of them.
+// Washington DC with roads in from three of them, and San Francisco on its island (sf.ts)
+// with its bridge from RT 8 to RT 3.
 import { clamp, lerp, mulberry32, smoothstep, type Vec2 } from '../util/math';
 import { FAMILY_NORMALS, HEX, OUTER, RING_APOTHEM, WORLD, hexDistance } from './bounds';
 import { terrainBase } from './hills';
 import { biomeAt, desertWeight, mountainWeight } from './biomes';
 import { setCorridors } from './corridors';
+import { BRIDGE_FEET, CRUNCH, CROSS_B, ISLAND, RING_ST, SF_AT, SF_LEVEL, SKY, type Foot, buildSky, carveSF, footRadius, sfCoords, shapeSF } from './sf';
 
 /** Highway half-width (6 lanes + shoulders, like the one between the cities). */
 export const HW = 15;
@@ -719,7 +721,7 @@ export const RAMPS: CurveRoad[] = makeRamps();
  */
 export interface Town {
   name: string;
-  kind: 'mariano' | 'alexander' | 'dc' | 'pad';
+  kind: 'mariano' | 'alexander' | 'dc' | 'sf' | 'pad';
   x: number;
   z: number;
   ux: number;
@@ -1095,6 +1097,78 @@ function makeDC(): Town {
 }
 
 /**
+ * San Francisco, on its island in the bay (its shape, the bridge and the exits: sf.ts).
+ * The bridge's feet meet roads in from RT 8 and RT 3, each splitting to join its highway
+ * both ways. Streets: the Embarcadero round the island, Market Street under the bridge,
+ * a cross street either side of it, and one street on from the foot of each exit to the
+ * Embarcadero; across the bay, the Crunch Labs yard at the end of the tunnel has a loop
+ * round the warehouse.
+ */
+function makeSF(): Town {
+  const t: Town = {
+    name: 'San Francisco', kind: 'sf', x: SF_AT[0], z: SF_AT[1], ux: 1, uz: 0, side: 1, level: SF_LEVEL, hw: -1, s: 0,
+    road: null!, roads: [], exits: [], area: { a0: -ISLAND.a, a1: ISLAND.a, b0: -ISLAND.b, b1: ISLAND.b },
+    annex: { a0: CRUNCH.a0, a1: CRUNCH.a1, b0: CRUNCH.b0, b1: CRUNCH.b1 }, blend: 0,
+  };
+  // RT 8 runs slantwise past the west end: the bridge's foot faces it square on, a little
+  // way off it, the bridge curving round from there to run due east.
+  const rt8 = HIGHWAYS.find((h) => h.name === 'RT 8')!;
+  let foot: Foot | null = null, best = Infinity;
+  for (let s = 4900; s < 5900; s += 5) {
+    const p = pointAt(rt8, s);
+    const [ia, ib] = p.uz > 0 ? [p.uz, -p.ux] : [-p.uz, p.ux];
+    const { a, b } = sfCoords(p.x + ia * 190, p.z + ib * 190);
+    const f = { a, b, ua: ia, ub: ib };
+    if (ib > -0.1 || b < 5) continue;
+    const score = Math.abs(footRadius(f) - 260);
+    if (score < best) (best = score), (foot = f);
+  }
+  const west = linkRoads(townPoint(t, foot!.a, foot!.b), [foot!.ua, foot!.ub]);
+  const east = linkRoads(townPoint(t, BRIDGE_FEET.e, 0), [-1, 0]);
+  const footHeight = (links: CurveRoad[]) => {
+    const h = HIGHWAYS[links[0].from];
+    return profileAt(h, highwayCoords(h, ...links[0].pts[links[0].pts.length - 1]).s);
+  };
+  const yW = footHeight(west), yE = footHeight(east);
+  for (const r of west) fillLink(r, yW);
+  for (const r of east) fillLink(r, yE);
+  buildSky(yW, yE, foot!);
+  const S = (pts: [number, number][], hw = 5.5) => street(t, pts, hw, 'street');
+  // The Embarcadero: round the island, back to where it started.
+  const R = RING_ST, ring: [number, number][] = [];
+  for (const [ca, cb, a0] of [[1, 1, 0], [-1, 1, 0.5], [-1, -1, 1], [1, -1, 1.5]] as const)
+    for (let i = 0; i <= 6; i++) {
+      const ang = (a0 + i / 12) * Math.PI;
+      ring.push([ca * (R.a - R.r) + Math.cos(ang) * R.r, cb * (R.b - R.r) + Math.sin(ang) * R.r]);
+    }
+  ring.push(ring[0]);
+  const end = (n: number) => {
+    const r = SKY[n];
+    return [r.pts[r.pts.length - 1][0] - t.x, r.pts[r.pts.length - 1][1] - t.z] as [number, number];
+  };
+  // From each exit's foot to the Embarcadero (straight on, north or south).
+  const feeder = (n: number) => {
+    const [a, b] = end(n);
+    return S([[a, b], [a, Math.sign(b) * (R.b - 1)]]);
+  };
+  const [ya, yb] = end(7);
+  const Y0 = CRUNCH.b0 + 40, Y1 = CRUNCH.b1 - 10, X0 = CRUNCH.a0 + 20, X1 = CRUNCH.a1 - 20;
+  t.roads = [
+    street(t, ring, R.hw, 'avenue'),
+    street(t, [[-R.a + 1, 0], [R.a - 1, 0]], 7, 'avenue'), // Market Street
+    S([[-R.a + 1, -CROSS_B], [R.a - 1, -CROSS_B]]), // Lombard Street
+    S([[-R.a + 1, CROSS_B], [R.a - 1, CROSS_B]]), // Mission Street
+    ...[1, 2, 3, 4, 5, 6].map(feeder),
+    // Crunch Labs: on from the tunnel, and round the warehouse.
+    S([[ya, yb], [ya, Y0]]),
+    S([[X0, Y0], [X1, Y0], [X1, Y1], [X0, Y1], [X0, Y0]]),
+  ];
+  t.road = west[0];
+  t.roads.push(...west, ...east);
+  return t;
+}
+
+/**
  * The rocket launch pads, where you can fly up to the space station: a level concrete
  * apron with the rocket standing in the middle, a road round it, and a road in from a
  * highway that splits to join it both ways (two exits). Frame: `a` along the highway,
@@ -1155,6 +1229,7 @@ const TOWN_LIST: Town[] = [];
   const a = makeAlexander(TOWN_LIST);
   if (a) TOWN_LIST.push(a);
   TOWN_LIST.push(makeDC());
+  TOWN_LIST.push(makeSF());
   for (const p of PAD_SPOTS) TOWN_LIST.push(makePad(p.name, p.at, p.hw));
   for (const t of TOWN_LIST) t.exits = exitsOf(t.roads);
 }
@@ -1164,6 +1239,7 @@ export const TOWNS: readonly Town[] = TOWN_LIST;
 export const TOWN: Town | null = TOWNS.find((t) => t.kind === 'mariano') ?? null;
 export const ALEXANDER: Town | null = TOWNS.find((t) => t.kind === 'alexander') ?? null;
 export const DC: Town = TOWNS.find((t) => t.kind === 'dc')!;
+export const SF: Town = TOWNS.find((t) => t.kind === 'sf')!;
 /** The two launch pads. */
 export const PADS: readonly Town[] = TOWNS.filter((t) => t.kind === 'pad');
 
@@ -1341,11 +1417,12 @@ export function shapeOuter(x: number, z: number, h: number) {
     if (Math.abs(dx) > 700 || Math.abs(dz) > 700) continue;
     h = lerp(h, c.h0, 1 - smoothstep(200, 400, Math.hypot(dx, dz)));
   }
-  // Towns sit on level ground.
+  // Towns sit on level ground (San Francisco on its island, in its bay).
   for (const t of TOWNS) {
     const out = townDistance(t, x, z);
     if (out < t.blend) h = lerp(h, t.level, 1 - smoothstep(0, t.blend, out));
   }
+  h = shapeSF(x, z, h);
   // Lakes: a basin below the water, a dry bank round it.
   for (const l of OUTER_LAKES) {
     const dx = x - l.x, dz = z - l.z;
@@ -1376,5 +1453,6 @@ export function shapeOuter(x: number, z: number, h: number) {
   if (c.edge < 32) pulls.push([(1 - smoothstep(2, 32, c.edge)) * (c.kind === 'ring' ? 1 : 0.999), c.h]);
   pulls.sort((a, b) => a[0] - b[0]);
   for (const [w, ph] of pulls) h = lerp(h, ph, w);
-  return h;
+  // San Francisco's tunnel is dug out, and the land kept clear under its bridge.
+  return carveSF(x, z, h);
 }

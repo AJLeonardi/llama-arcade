@@ -12,10 +12,11 @@
 // Flat ground is mapped from above at two scales and angles (so the tiling doesn't
 // show); rock is mapped from three directions (triplanar, so cliffs don't stretch).
 // Sand, sandstone, snow and grey rock have normal maps for real relief.
+import { ASSETS } from '../util/assets';
 import * as THREE from 'three';
 import { FIELD_GRID } from './biomes';
 
-const base = import.meta.env.BASE_URL;
+const base = ASSETS;
 
 function load(file: string, color: boolean) {
   const t = new THREE.TextureLoader().load(`${base}textures/${file}`);

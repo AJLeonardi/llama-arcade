@@ -11,10 +11,11 @@
 // Each kind is one geometry and one material, drawn as an InstancedMesh per chunk.
 // Each picture keeps its bark in a strip along the bottom, so the trunk shares the
 // leaves' material (one draw call per kind).
+import { ASSETS } from '../util/assets';
 import * as THREE from 'three';
 import { mulberry32 } from '../util/math';
 
-const base = import.meta.env.BASE_URL;
+const base = ASSETS;
 const SIZE = 256;
 /** The bottom of each picture (v < BARK) is bark, for the trunks. */
 const BARK = 0.11;

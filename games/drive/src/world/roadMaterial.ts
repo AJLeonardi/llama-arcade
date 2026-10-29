@@ -1,9 +1,10 @@
 // Road surfaces: a CC0 photo of asphalt (with its normal map, for real grit), laid in
 // world space at two scales so the repeat doesn't show, under the code-drawn lane
 // markings and tyre wear (a see-through texture following the road's own UVs).
+import { ASSETS } from '../util/assets';
 import * as THREE from 'three';
 
-const base = import.meta.env.BASE_URL;
+const base = ASSETS;
 let shared: { color: THREE.Texture; normal: THREE.Texture } | null = null;
 
 function asphalt() {

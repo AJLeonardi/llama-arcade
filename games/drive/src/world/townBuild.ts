@@ -1,5 +1,5 @@
 // The towns, built (where they sit and their roads are in outer.ts:TOWNS). This file
-// has Mariano-ville; Alexander-ville and Washington DC have their own files.
+// has Mariano-ville; Alexander-ville, Washington DC and San Francisco have their own files.
 //
 // Mariano-ville: a little New England town centre in the autumn woods. Main Street runs
 // in front of the town green, with a row of clapboard shops on one side; across it is
@@ -15,10 +15,12 @@ import { box, paint } from '../vehicles/builders/geo';
 import { textPanel, twoSidedSign } from './landmarks';
 import { mulberry32, type Rng } from '../util/math';
 import { sidewalkTexture } from '../util/textures';
+import { ASSETS } from '../util/assets';
 import { SIDINGS, Siding, TownItem, TownKit, sidingTexture, welcomeTexture } from './townKit';
 import { buildAlexander } from './alexanderBuild';
 import { buildDC } from './dcBuild';
 import { buildPad } from './padBuild';
+import { buildSF } from './sfBuild';
 import type { TreeKind } from './trees';
 
 export type { TownItem } from './townKit';
@@ -35,6 +37,7 @@ function build() {
     if (t.kind === 'mariano') buildMariano(kit);
     else if (t.kind === 'alexander') buildAlexander(kit);
     else if (t.kind === 'pad') buildPad(kit);
+    else if (t.kind === 'sf') buildSF(kit);
     else buildDC(kit);
     kit.finish();
     items.push(...kit.items);
@@ -51,7 +54,7 @@ export function townMaterials(): Record<string, THREE.Material> {
     out[`siding-${k}`] = new THREE.MeshStandardMaterial({ map: sidingTexture(v), roughness: 0.8, metalness: 0 });
     out[`siding-${k}`].userData.castShadow = true;
   }
-  const lawn = new THREE.TextureLoader().load(`${import.meta.env.BASE_URL}textures/grass_color.webp`);
+  const lawn = new THREE.TextureLoader().load(`${ASSETS}textures/grass_color.webp`);
   lawn.wrapS = lawn.wrapT = THREE.RepeatWrapping;
   lawn.colorSpace = THREE.SRGBColorSpace;
   lawn.anisotropy = 4;

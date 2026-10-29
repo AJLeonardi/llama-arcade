@@ -4,10 +4,13 @@
 // other road's nodes close by (that's how crossings, T-junctions and ramps join up).
 // The way up Thunder Mountain's spiral (terrain, not a Road) is added as an extra path,
 // and so is highway country. Straight highways never join each other directly (they
-// cross on bridges): only through the ramps, and at the Ring.
+// cross on bridges): only through the ramps, and at the Ring. San Francisco's roads in
+// the sky only join roads at the same height (the bridge and its exits, each exit's foot
+// and its street), never the streets they pass over.
 import type { Vec2 } from '../util/math';
 import { ALL_ROADS, MOUNTAIN, MOUNTAIN_ROAD } from './layout';
 import { HIGHWAYS, HW, RAMPS, RAMP_HW, RING, TOWNS } from './outer';
+import { SKY } from './sf';
 
 const STEP = 8; // node spacing along a road (m)
 const JOIN = 9; // nodes of different roads this close are connected (or within the wider road's half-width)
@@ -32,6 +35,9 @@ interface Graph {
   hw: number[];
   /** Share of top speed on the road each node is on. */
   pace: number[];
+  /** Road height (roads in the sky; NaN elsewhere), and whether the node is up off the ground. */
+  y: number[];
+  air: boolean[];
   adj: number[][];
   grid: Map<number, number[]>;
 }
@@ -52,26 +58,29 @@ function mountainPath(): Vec2[] {
 }
 
 function build(): Graph {
-  const g: Graph = { x: [], z: [], hw: [], pace: [], adj: [], grid: new Map() };
+  const g: Graph = { x: [], z: [], hw: [], pace: [], y: [], air: [], adj: [], grid: new Map() };
   const owner: number[] = [];
   const isLine: boolean[] = [];
-  const paths: { pts: Vec2[]; closed: boolean; hw: number; pace: number; line?: boolean; step?: number }[] = [
+  const paths: { pts: Vec2[]; closed: boolean; hw: number; pace: number; line?: boolean; step?: number; ys?: number[]; air?: boolean[] }[] = [
     ...ALL_ROADS.map((r) => ({ pts: r.pts, closed: !!r.closed, hw: r.width / 2, pace: PACE[r.kind] })),
     { pts: mountainPath(), closed: false, hw: 7, pace: PACE.mountain },
     ...HIGHWAYS.map((h) => ({ pts: h.pts.filter((_, i) => i % 2 === 0 || i === h.pts.length - 1), closed: false, hw: HW, pace: PACE.highway, line: true, step: 50 })),
     { pts: RING.pts.filter((_, i) => i % 2 === 0), closed: true, hw: HW, pace: PACE.highway, step: 50 },
     ...RAMPS.map((r) => ({ pts: r.pts, closed: false, hw: RAMP_HW, pace: PACE.ramp })),
     ...TOWNS.flatMap((t) => t.roads.map((r) => ({ pts: r.pts, closed: false, hw: r.hw, pace: PACE.town }))),
+    ...SKY.map((r) => ({ pts: r.pts, closed: false, hw: r.ws[Math.floor(r.ws.length / 2)], pace: r.kind === 'bridge' ? PACE.highway : PACE.ramp, ys: r.ys, air: r.air })),
   ];
   paths.forEach((p, pi) => {
     const first = g.x.length;
     const n = p.pts.length;
-    const add = (x: number, z: number) => {
+    const add = (x: number, z: number, y = NaN, air = false) => {
       const id = g.x.length;
       g.x.push(x);
       g.z.push(z);
       g.hw.push(p.hw);
       g.pace.push(p.pace);
+      g.y.push(y);
+      g.air.push(air);
       g.adj.push([]);
       owner.push(pi);
       isLine.push(!!p.line);
@@ -80,11 +89,18 @@ function build(): Graph {
     for (let i = 0; i < n - 1 + (p.closed ? 1 : 0); i++) {
       const a = p.pts[i], b = p.pts[(i + 1) % n];
       const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / (p.step ?? STEP)));
-      for (let k = 0; k < steps; k++) add(a[0] + ((b[0] - a[0]) * k) / steps, a[1] + ((b[1] - a[1]) * k) / steps);
+      const j = (i + 1) % n;
+      for (let k = 0; k < steps; k++)
+        add(a[0] + ((b[0] - a[0]) * k) / steps, a[1] + ((b[1] - a[1]) * k) / steps,
+          p.ys ? p.ys[i] + ((p.ys[j] - p.ys[i]) * k) / steps : NaN, !!p.air && p.air[i] && (k === 0 || p.air[j]));
     }
     if (p.closed) link(g.x.length - 1, first);
-    else add(p.pts[n - 1][0], p.pts[n - 1][1]);
+    else add(p.pts[n - 1][0], p.pts[n - 1][1], p.ys ? p.ys[n - 1] : NaN, !!p.air?.[n - 1]);
   });
+  /** Up in the air, roads only join others at the same height. */
+  function sameLevel(a: number, b: number) {
+    return !(g.air[a] || g.air[b]) || Math.abs(g.y[a] - g.y[b]) < 3;
+  }
   function link(a: number, b: number) {
     if (!g.adj[a].includes(b)) g.adj[a].push(b);
     if (!g.adj[b].includes(a)) g.adj[b].push(a);
@@ -101,7 +117,7 @@ function build(): Graph {
     for (let ix = cx - 2; ix <= cx + 2; ix++)
       for (let iz = cz - 2; iz <= cz + 2; iz++)
         for (const j of g.grid.get(key(ix, iz)) ?? [])
-          if (j > i && owner[j] !== owner[i] && !(isLine[i] && isLine[j]) && Math.hypot(g.x[i] - g.x[j], g.z[i] - g.z[j]) <= Math.max(JOIN, Math.max(g.hw[i], g.hw[j]) + 2)) link(i, j);
+          if (j > i && owner[j] !== owner[i] && !(isLine[i] && isLine[j]) && Math.hypot(g.x[i] - g.x[j], g.z[i] - g.z[j]) <= Math.max(JOIN, Math.max(g.hw[i], g.hw[j]) + 2) && sameLevel(i, j)) link(i, j);
   }
   return g;
 }

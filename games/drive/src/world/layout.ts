@@ -10,6 +10,7 @@ import { WORLD } from './bounds';
 import { terrainBase } from './hills';
 import { biomeAt } from './biomes';
 import { outerLakeAt, outerRoadAt, shapeOuter, townAt } from './outer';
+import { BAY_LEVEL, bayDepth, inTunnel, skyRoadAt } from './sf';
 
 export { WORLD, OUTER, TERRAIN_CELL, CHUNK } from './bounds';
 
@@ -389,7 +390,9 @@ export function heightAt(x: number, z: number) {
   return shapeOuter(x, z, h);
 }
 
-export function surfaceAt(x: number, z: number): Surface {
+/** What the ground is at a spot (`y`: the height there, for roads up in the air and in tunnels). */
+export function surfaceAt(x: number, z: number, y?: number): Surface {
+  if (y !== undefined && (skyRoadAt(x, z, y) || inTunnel(x, z, y))) return 'asphalt';
   const depth = waterDepth(x, z);
   const road = roadAt(x, z);
   if (road === 'dirt') return 'dirt';
@@ -401,8 +404,10 @@ export function surfaceAt(x: number, z: number): Surface {
   if (depth > 1.2) return 'water';
   if (depth > 0.05) return 'sand';
   if (inAABB(x, z, DEMO_PARK)) return 'dirt';
+  const bay = bayDepth(x, z);
+  if (bay > 0) return bay > 1.2 ? 'water' : 'sand';
   const town = townAt(x, z);
-  if (town) return town.kind === 'pad' ? 'concrete' : 'grass'; // (lawns, even in the desert; launch pads are concrete)
+  if (town) return town.kind === 'pad' || town.kind === 'sf' ? 'concrete' : 'grass'; // (lawns, even in the desert; launch pads and San Francisco are concrete)
   const b = biomeAt(x, z);
   if (b.desert > 0.5) return 'dirt'; // desert sand (firm enough to drive and drift on)
   if (b.mountain > 0.5) return 'snow';
@@ -440,15 +445,17 @@ export const BRIDGES: Bridge[] = [-1680, -2020, -2250].map(bostonX).map((x) => (
   width: 16,
 }));
 
-/** Height of the water surface at a spot, or null if it's dry land. */
-export function waterLevelAt(x: number, z: number): number | null {
+/** Height of the water surface at a spot, or null if it's dry land (`y`: the height there, for the tunnel under the bay). */
+export function waterLevelAt(x: number, z: number, y?: number): number | null {
   if (waterDepth(x, z) > 0 && !bridgeAt(x, z)) return WATER_LEVEL;
+  if (bayDepth(x, z) > 0) return y !== undefined && inTunnel(x, z, y) ? null : BAY_LEVEL;
   return outerLakeAt(x, z)?.level ?? null;
 }
 
-/** Is this spot deep water (car would sink)? */
-export const isDeepWater = (x: number, z: number) => {
+/** Is this spot deep water (car would sink)? (`y`: the height there; the tunnel under the bay is dry.) */
+export const isDeepWater = (x: number, z: number, y?: number) => {
   if (waterDepth(x, z) > -WATER_LEVEL + 1.0 && !bridgeAt(x, z)) return true;
+  if (bayDepth(x, z) > 1.2) return !(y !== undefined && inTunnel(x, z, y));
   const l = outerLakeAt(x, z);
   return !!l && Math.hypot(x - l.x, z - l.z) < l.r * 0.8;
 };

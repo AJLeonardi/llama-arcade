@@ -22,6 +22,16 @@ import { groundPiece, terrainPatch } from './terrain';
 import { ROAD_ORDER, normalizeAttributes } from './batch';
 import { box, cyl, paint } from '../vehicles/builders/geo';
 import { textPanel } from './landmarks';
+import { bayDepth, forSkyAt, islandEdge, BAY } from './sf';
+import { skyColliders } from './sfBuild';
+
+/** San Francisco's bay and its banks, and under its bridge and exits: no trees or bushes. */
+function sfClear(x: number, z: number) {
+  if (bayDepth(x, z) > 0 || islandEdge(x, z) < BAY.w + 8) return false;
+  let under = false;
+  forSkyAt(x, z, () => (under = true));
+  return !under;
+}
 
 const N = CHUNK / TERRAIN_CELL; // cells per chunk side
 /** Distances (m) from the player to a chunk's nearest point. */
@@ -122,6 +132,8 @@ export class OuterWorld {
     // the first time one comes into view (that would be a stutter mid-drive).
     for (const k of TREE_KINDS) treeMaterial(k), treeGeometry(k);
     townItems(() => false);
+    // San Francisco's bridge and exits: their decks and barriers, for good.
+    skyColliders(physics);
     // Invisible walls round the edge of the map (the Ring and the mountains come first).
     const W = OUTER;
     for (const [cx, cz, hx, hz] of [
@@ -340,7 +352,7 @@ export class OuterWorld {
     };
     const inChunk = (x: number, z: number) => x >= c.x0 && x < c.x0 + CHUNK && z >= c.z0 && z < c.z0 + CHUNK;
     const clear = (x: number, z: number) =>
-      !outerRoadAt(x, z) && !outerRoadAt(x + 3, z) && !outerRoadAt(x - 3, z) && !outerRoadAt(x, z + 3) && !outerRoadAt(x, z - 3) && !outerLakeAt(x, z) && !townAt(x, z, 10);
+      !outerRoadAt(x, z) && !outerRoadAt(x + 3, z) && !outerRoadAt(x - 3, z) && !outerRoadAt(x, z + 3) && !outerRoadAt(x, z - 3) && !outerLakeAt(x, z) && !townAt(x, z, 10) && sfClear(x, z);
     const spots: [number, number][] = [];
     // Verges of the highways crossing this chunk.
     for (const hw of HIGHWAYS) {
@@ -434,7 +446,7 @@ export class OuterWorld {
       if (townAt(x, z, 15)) return;
       if (c.clearings.some(([cx, cz, r]) => Math.hypot(x - cx, z - cz) < r)) return;
       if (TOWERS.some((t) => Math.abs(t.x - x) < 8 && Math.abs(t.z - z) < 8)) return;
-      if (!roadFree(x, z, 7)) return;
+      if (!roadFree(x, z, 7) || !sfClear(x, z)) return;
       let kind: TreeKind;
       if (b.mountain > 0.5) kind = 'pineSnow';
       else if (b.forest > 0.4) kind = b.autumn > 0.5 ? (rng() < 0.72 ? 'autumn' : 'pine') : rng() < 0.55 ? 'pine' : 'broad';

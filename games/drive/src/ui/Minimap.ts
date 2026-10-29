@@ -7,6 +7,7 @@ import {
   ALL_ROADS, BOSTON, BOSTON_COMMON, CENTRAL_PARK, DEMO_PARK, HARBOR, HARBOR_X, LAKE, LOOP, MOUNTAIN, NYC, OUTER, RIVER, Road, TRACK, WORLD,
 } from '../world/layout';
 import { ALEX, DC, DC_PLAN, HIGHWAYS, MAIN_ST, OUTER_LAKES, RAMPS, RING, TOWNS, pointAt, profileAt, townPoint } from '../world/outer';
+import { BAY, CRUNCH, ISLAND, SF_AT, SKY, sfPoint } from '../world/sf';
 import { RING_APOTHEM, HEX, hexDistance } from '../world/bounds';
 import { findRoute, routeSeconds, type Route } from '../world/route';
 import { FieldKind, biomeAt, fieldKind, mountainWeight } from '../world/biomes';
@@ -39,9 +40,11 @@ export const DESTINATIONS: Destination[] = [
 function countryDestinations(): Destination[] {
   const out: Destination[] = [];
   for (const t of TOWNS) {
-    const [x, z] = t.kind === 'mariano' ? townPoint(t, 0, MAIN_ST + 55) : t.kind === 'alexander' ? townPoint(t, 0, ALEX.avenues[0]) : t.kind === 'pad' ? [t.x, t.z] : townPoint(t, ...DC_PLAN.monument);
-    out.push({ x, z, icon: t.kind === 'mariano' ? '🍁' : t.kind === 'alexander' ? '🌾' : t.kind === 'pad' ? '🚀' : '🏛️', label: t.name });
+    const [x, z] = t.kind === 'mariano' ? townPoint(t, 0, MAIN_ST + 55) : t.kind === 'alexander' ? townPoint(t, 0, ALEX.avenues[0]) : t.kind === 'pad' || t.kind === 'sf' ? [t.x, t.z] : townPoint(t, ...DC_PLAN.monument);
+    out.push({ x, z, icon: t.kind === 'mariano' ? '🍁' : t.kind === 'alexander' ? '🌾' : t.kind === 'pad' ? '🚀' : t.kind === 'sf' ? '🌉' : '🏛️', label: t.name });
   }
+  const [cx, cz] = sfPoint((CRUNCH.a0 + CRUNCH.a1) / 2, (CRUNCH.b0 + CRUNCH.b1) / 2);
+  out.push({ x: cx, z: cz, icon: '🐿️', label: 'Crunch Labs' });
   // The top of the highest pass, and the middle of farm country.
   let pass: Destination | null = null, top = -Infinity, farm: Destination | null = null, farmBest = 0;
   for (const h of HIGHWAYS)
@@ -176,10 +179,24 @@ function drawLand(): HTMLCanvasElement {
 function countryPaths() {
   const highways = new Path2D();
   for (const h of HIGHWAYS) h.pts.forEach(([x, z], i) => (i ? highways.lineTo(x, z) : highways.moveTo(x, z)));
+  SKY[0].pts.forEach(([x, z], i) => (i ? highways.lineTo(x, z) : highways.moveTo(x, z)));
   RING.pts.forEach(([x, z], i) => (i ? highways.lineTo(x, z) : highways.moveTo(x, z)));
   highways.closePath();
   const ramps = new Path2D();
-  for (const r of [...RAMPS, ...TOWNS.flatMap((t) => t.roads)]) r.pts.forEach(([x, z], i) => (i ? ramps.lineTo(x, z) : ramps.moveTo(x, z)));
+  for (const r of [...RAMPS, ...TOWNS.flatMap((t) => t.roads), ...SKY.slice(1)]) r.pts.forEach(([x, z], i) => (i ? ramps.lineTo(x, z) : ramps.moveTo(x, z)));
+  // San Francisco: the bay, the island in it, and the Crunch Labs yard across the water.
+  const bay = new Path2D(), island = new Path2D();
+  const rounded = (p: Path2D, ha: number, hb: number, r: number) => {
+    const [x, z] = SF_AT;
+    p.moveTo(x + ha, z);
+    for (const [ca, cb, a0] of [[1, 1, 0], [-1, 1, 0.5], [-1, -1, 1], [1, -1, 1.5]] as const)
+      p.arc(x + ca * (ha - r), z + cb * (hb - r), r, a0 * Math.PI, (a0 + 0.5) * Math.PI);
+    p.closePath();
+  };
+  rounded(bay, ISLAND.a + BAY.w - 12, ISLAND.b + BAY.w - 12, ISLAND.r + BAY.w - 12);
+  rounded(island, ISLAND.a, ISLAND.b, ISLAND.r);
+  const [y0x, y0z] = sfPoint(CRUNCH.a0, CRUNCH.b0);
+  island.rect(y0x, y0z, CRUNCH.a1 - CRUNCH.a0, CRUNCH.b1 - CRUNCH.b0);
   // Washington DC: the city's ground, with the Mall's lawn down the middle.
   const city = new Path2D(), lawn = new Path2D();
   const rect = (p: Path2D, a0: number, b0: number, a1: number, b1: number) => {
@@ -208,7 +225,7 @@ function countryPaths() {
     else hills.lineTo(Math.cos(m) * R, Math.sin(m) * R);
   });
   hills.closePath();
-  return { highways, ramps, lakes, hills, city, lawn };
+  return { highways, ramps, lakes, hills, city, lawn, bay, island };
 }
 
 function arrow(g: CanvasRenderingContext2D, x: number, y: number, size: number, angle: number, fill: string) {
@@ -265,6 +282,9 @@ function paintWorld(g: CanvasRenderingContext2D, middle: HTMLCanvasElement, land
   g.fill(paths.lawn);
   g.fillStyle = '#4b93cf';
   g.fill(paths.lakes);
+  g.fill(paths.bay);
+  g.fillStyle = '#d9d4c8';
+  g.fill(paths.island);
   g.lineCap = 'round';
   g.lineJoin = 'round';
   // Roads at their real width, but never thinner than a few pixels.

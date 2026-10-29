@@ -645,7 +645,7 @@ export class Game {
       if (car.wrecked) {
         this.state = 'wrecked';
         this.stateTimer = 0;
-      } else if (!space && isDeepWater(p.x, p.z) && p.y < (waterLevelAt(p.x, p.z) ?? -Infinity) - 0.3) {
+      } else if (!space && isDeepWater(p.x, p.z, p.y) && p.y < (waterLevelAt(p.x, p.z, p.y) ?? -Infinity) - 0.3) {
         this.startSinking();
         return false;
       } else if (p.y < (space ? NET.y - 200 : -60)) {
@@ -655,7 +655,7 @@ export class Game {
       // Remember where the car is on its wheels on dry land, for respawning here.
       const up = car.sim.up();
       this.safeTimer -= dt;
-      const dry = space ? overDeck(p.x, p.z) && Math.abs(p.y - SY) < 1.5 : waterLevelAt(p.x, p.z) === null;
+      const dry = space ? overDeck(p.x, p.z) && Math.abs(p.y - SY) < 1.5 : waterLevelAt(p.x, p.z, p.y) === null;
       if (this.safeTimer <= 0 && car.sim.wheelsInContact >= 3 && up.y > 0.85 && dry) {
         this.safeTimer = 0.5;
         const f = car.sim.forward();
@@ -669,7 +669,7 @@ export class Game {
       this.stateTimer += dt;
       // Let the car finish tumbling before showing the message.
       if (this.stateTimer > 1.4 && this.hud.current !== 'wrecked') this.hud.show('wrecked');
-      if (this.realm === 'earth' && isDeepWater(p.x, p.z) && p.y < (waterLevelAt(p.x, p.z) ?? -Infinity) - 0.3) this.startSinking();
+      if (this.realm === 'earth' && isDeepWater(p.x, p.z, p.y) && p.y < (waterLevelAt(p.x, p.z, p.y) ?? -Infinity) - 0.3) this.startSinking();
     } else if (this.state === 'sinking') {
       this.stateTimer += dt;
       if (this.stateTimer > SINK_SECONDS) {

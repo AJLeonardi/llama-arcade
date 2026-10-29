@@ -4,6 +4,7 @@ import { RING_APOTHEM, hexDistance } from '../src/world/bounds';
 import { biomeAt, mountainWeight } from '../src/world/biomes';
 import { CANYON } from '../src/world/hills';
 import { heightAt, surfaceAt } from '../src/world/layout';
+import { SKY, TUNNEL_A, onSFGround } from '../src/world/sf';
 
 const BRONCO = 47; // m/s
 
@@ -126,10 +127,11 @@ describe('highway country', () => {
     expect(rise / n).toBeGreaterThan(120);
   });
 
-  it('has three towns: Mariano-ville, Alexander-ville and Washington DC', () => {
+  it('has four towns: Mariano-ville, Alexander-ville, Washington DC and San Francisco', () => {
     const towns = TOWNS.filter((t) => t.kind !== 'pad');
-    expect(towns.map((t) => t.name).sort()).toEqual(['Alexander-ville', 'Mariano-ville', 'Washington DC']);
-    for (const a of towns) for (const b of towns) if (a !== b) expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThan(2500);
+    expect(towns.map((t) => t.name).sort()).toEqual(['Alexander-ville', 'Mariano-ville', 'San Francisco', 'Washington DC']);
+    // (San Francisco and DC are neighbours in the desert, either side of RT 8.)
+    for (const a of towns) for (const b of towns) if (a !== b) expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThan(a.kind === 'sf' || b.kind === 'sf' ? 1800 : 2500);
   });
 
   it('has two launch pads, each with a road in from a highway that joins it both ways', () => {
@@ -179,15 +181,19 @@ describe('highway country', () => {
 
   it('every town street ends on another road, and the roads in end on a highway', () => {
     for (const t of TOWNS)
-      for (const r of t.roads)
-        for (const end of [r.pts[0], r.pts[r.pts.length - 1]]) {
+      for (const r of t.roads) {
+        // (A street round a block ends where it started.)
+        const loop = Math.hypot(r.pts[0][0] - r.pts[r.pts.length - 1][0], r.pts[0][1] - r.pts[r.pts.length - 1][1]) < 1;
+        for (const end of loop ? [] : [r.pts[0], r.pts[r.pts.length - 1]]) {
           let onHighway = false;
           forNearHighways(end[0], end[1], (h, s, d) => {
             if (Math.abs(d) < HW && s > 0 && s < h.len) onHighway = true;
           });
-          const onStreet = t.roads.some((o) => o !== r && o.pts.some(([x, z], i) => i < o.pts.length - 1 && segDist(end, [x, z], o.pts[i + 1]) < o.hw + 1));
+          // (In San Francisco, streets also start at the foot of an exit, and the roads in at the bridge's feet.)
+          const onStreet = [...t.roads, ...(t.kind === 'sf' ? SKY : [])].some((o) => o !== r && o.pts.some(([x, z], i) => i < o.pts.length - 1 && segDist(end, [x, z], o.pts[i + 1]) < ('hw' in o ? o.hw : o.ws[i]) + 1));
           expect(onHighway || onStreet, `${t.name}: road end at ${end.map(Math.round)}`).toBe(true);
         }
+      }
   });
 
   it('the roads into town are gentle, and run into nothing on the way', () => {
@@ -215,6 +221,8 @@ describe('highway country', () => {
         for (let b = area.b0; b <= area.b1; b += 20) {
           const [x, z] = townPoint(t, a, b);
           if (OUTER_LAKES.some((l) => Math.hypot(l.x - x, l.z - z) < l.r + 14)) continue;
+          // (San Francisco's island has round corners in the bay, and the tunnel dug under it.)
+          if (t.kind === 'sf' && (!onSFGround(x, z, -12) || Math.abs(a - TUNNEL_A) < 16)) continue;
           // Level, or on one of the town's own roads (the roads in slope down to it).
           const c = nearestCurve(x, z);
           if (c.edge > 30) expect(Math.abs(heightAt(x, z) - t.level), `${t.name} ${a},${b}`).toBeLessThan(0.05);

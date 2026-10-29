@@ -25,7 +25,8 @@ export interface Handicap {
 export const HEALTHY: Handicap = { power: 1, topSpeed: 1, steerPull: 0, engineCut: false };
 
 export interface WorldQueries {
-  surfaceAt(x: number, z: number): Surface;
+  /** (`y`: the height of the contact, for roads up in the air.) */
+  surfaceAt(x: number, z: number, y?: number): Surface;
   /** Extra stick-to-the-track force zone (the loop). */
   inStickZone(x: number, z: number): boolean;
   /** Where (world z) the loop's surface is centred after `progress` (0..1) of the way round. */
@@ -186,7 +187,7 @@ export class VehicleSim {
       if (ctrl.wheelIsInContact(i)) {
         contact++;
         const p = ctrl.wheelContactPoint(i);
-        const s = p ? q.surfaceAt(p.x, p.z) : 'asphalt';
+        const s = p ? q.surfaceAt(p.x, p.z, p.y) : 'asphalt';
         this.wheelSurface[i] = s;
         const sp = SURFACES[s];
         ctrl.setWheelFrictionSlip(i, sp.grip * spec.grip);
