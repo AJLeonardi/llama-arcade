@@ -14,6 +14,8 @@ const AIR_SPIN = 5.5; // rad/s
 const BACKFLIP_TIME = 0.75; // seconds for one backflip
 const KICKFLIP_TIME = 0.42;
 const BAIL_TIME = 1.8;
+/** At top speed you ride until you've slowed this much (m/s), then push again. */
+const PUSH_AGAIN = 1.5;
 /** Landing harder than this (m/s into the ground) is a fall. */
 export const HARD_LANDING = 32;
 /** Above this airtime a trick counts and a landing can go wrong. */
@@ -83,6 +85,11 @@ export class Skater {
   /** Seconds since landing (for the knees-bend animation). */
   sinceLand = 9;
   pushing = false;
+  /**
+   * At top pushing speed: ride along instead of pushing until we've slowed down a bit (like a real skater),
+   * so pushing doesn't flick on and off every step right at the top speed.
+   */
+  cruising = false;
   score = 0;
   best = 0;
   stats: BoardStats;
@@ -104,6 +111,14 @@ export class Skater {
     this.rail = null;
     this.bailT = 0;
     this.lastSafe = { x: SPAWN.x, y: SPAWN.y, z: SPAWN.z, heading: SPAWN.heading };
+  }
+
+  /** Standing still on the ground at (x, z), facing `heading` (the map's "skate to…"). */
+  placeAt(x: number, z: number, heading: number) {
+    this.respawn();
+    const g = surfaceAt(x, z, 0.5);
+    Object.assign(this, { x, z, y: g.h, heading });
+    this.lastSafe = { x, y: g.h, z, heading };
   }
 
   private resetTricks() {
@@ -156,7 +171,9 @@ export class Skater {
     let a = -G * dy;
     const flat = this.ny > 0.96;
     this.pushing = false;
-    if (inp.throttle > 0.1 && flat && this.speed < this.stats.push) {
+    if (this.speed >= this.stats.push) this.cruising = true;
+    else if (this.speed < this.stats.push - PUSH_AGAIN) this.cruising = false;
+    if (inp.throttle > 0.1 && flat && !this.cruising) {
       a += 3.2 * inp.throttle;
       this.pushing = true;
     }
@@ -399,7 +416,7 @@ export class Skater {
   /** Lands on a rail if we're coming down onto one, moving roughly along it. */
   private tryGrind(nx: number, ny: number, nz: number) {
     if (this.vy > 1) return false;
-    for (const r of railsAt(nz)) {
+    for (const r of railsAt(nz, nx)) {
       const [ax, ay, az] = r.a, [bx, by, bz] = r.b;
       const ex = bx - ax, ey = by - ay, ez = bz - az;
       const len = Math.hypot(ex, ey, ez);
@@ -457,6 +474,8 @@ export class Skater {
     this.ny = 1;
     const off = this.railS < 0 || this.railS > len;
     const jump = inp.ollie || inp.kickflip || inp.backflip;
+    // Ran off the end onto the next piece of the same rail (round benches, bends, the coaster): carry on.
+    if (off && !jump && this.nextRail(r, len, ux, uy, uz)) return;
     if (off || jump || Math.abs(this.railV) < 0.3) {
       const points = Math.round(this.grindT * 10) * 10;
       this.score += points;
@@ -474,6 +493,29 @@ export class Skater {
         this.startTricks(inp);
       }
     }
+  }
+
+  /** Moves onto a rail that starts where this one ended, going roughly the same way. */
+  private nextRail(r: Rail, len: number, ux: number, uy: number, uz: number) {
+    const atB = this.railS > len;
+    const end = atB ? r.b : r.a;
+    const over = atB ? this.railS - len : -this.railS;
+    const dir = Math.sign(this.railV) || 1;
+    const [mx, my, mz] = [ux * dir, uy * dir, uz * dir]; // the way we're moving
+    for (const n of railsAt(this.z, this.x)) {
+      if (n === r) continue;
+      for (const [p, q, sgn] of [[n.a, n.b, 1], [n.b, n.a, -1]] as const) {
+        if (Math.hypot(p[0] - end[0], p[1] - end[1], p[2] - end[2]) > 0.05) continue;
+        const nl = Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
+        const along = ((q[0] - p[0]) * mx + (q[1] - p[1]) * my + (q[2] - p[2]) * mz) / nl;
+        if (along < 0.6) continue;
+        this.rail = n;
+        this.railS = sgn > 0 ? over : nl - over;
+        this.railV = sgn * Math.abs(this.railV);
+        return true;
+      }
+    }
+    return false;
   }
 
   private bail(why: string) {
@@ -551,7 +593,7 @@ export class Skater {
  * (above a little bump, below the waist) for a skater whose feet are at `feet`; null if none.
  */
 export function railCrossed(x0: number, z0: number, x1: number, z1: number, feet: number): Rail | null {
-  for (const r of railsAt(z1)) {
+  for (const r of railsAt(z1, x1)) {
     if (r.edge) continue; // a ledge's edge: the ledge itself is the wall
     const [ax, ay, az] = r.a, [bx, by, bz] = r.b;
     const ex = bx - ax, ez = bz - az, px = x1 - x0, pz = z1 - z0;

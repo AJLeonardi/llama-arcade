@@ -14,6 +14,7 @@ import { DEFAULT_LOOK, SkaterModel, type Look } from './view/skaterModel';
 import { BOARDS } from './view/textures';
 import { sfx, rolling, unlock } from './ui/sfx';
 import { UI, type Screen } from './ui/ui';
+import { CityMap, type Place } from './ui/map';
 
 // ---------------------------------------------------------------- saving
 
@@ -154,17 +155,37 @@ const ui = new UI(
   save.board,
   save.best,
 );
+const map = new CityMap(
+  () => setMode('map'),
+  () => setMode('play'),
+  (p) => goTo(p),
+);
+ui.surface.append(map.mini);
+ui.add('map', map.screen);
+ui.show('title');
 const controls = new Controls(ui.surface, ui.ollieBtn);
 const queued = { ollie: false, kickflip: false, backflip: false };
 window.addEventListener('keydown', (e) => {
+  if (!e.repeat && e.code === 'KeyM' && mode === 'map') return setMode('play');
   if (e.repeat || mode !== 'play') return;
   if (e.code === 'KeyF' || e.code === 'KeyK') queued.kickflip = true;
   if (e.code === 'KeyB' || e.code === 'KeyL') queued.backflip = true;
+  if (e.code === 'KeyM') setMode('map');
   if (e.code === 'Escape' || e.code === 'KeyP') setMode('pause');
   if (e.code === 'KeyR') restart();
 });
 window.addEventListener('pointerdown', () => unlock());
 document.addEventListener('visibilitychange', () => document.hidden && mode === 'play' && setMode('pause'));
+/** The map's "skate to…": the roof is a restart; anywhere else, stand there ready to go. */
+function goTo(p: Place) {
+  if (p.roof) return restart();
+  sim.placeAt(p.x, p.z, p.heading);
+  prev.set(sim.x, sim.y, sim.z);
+  camYaw = sim.heading;
+  camPos.set(0, 0, 0); // snap the camera there
+  setMode('play');
+}
+
 function restart() {
   placeAtStart();
   setMode('play');
@@ -173,6 +194,7 @@ function restart() {
 function setMode(m: Screen) {
   mode = m;
   ui.show(m);
+  if (m === 'map') map.opened();
   controls.enabled = m === 'play';
   controls.reset();
   if (m !== 'play') rolling(0, false, false);
@@ -345,6 +367,7 @@ function frame(now: number) {
     const [vx, vy, vz] = sim.velocity();
     rolling(Math.hypot(vx, vy, vz), sim.mode === 'ground', sim.mode === 'grind');
     ui.hud(sim.score, Math.max(0, sim.z) / MILE);
+    map.update(now, shown.x, shown.z, sim.heading);
   } else {
     shown.set(sim.x, sim.y, sim.z);
     acc = 0;
@@ -380,6 +403,7 @@ function frame(now: number) {
   sun.target.position.copy(shown);
   sun.position.copy(shown).addScaledVector(SUN_DIR, 80);
   city.update(sim.z, mode === 'play' ? 1 : 2);
+  city.animate(dt, now / 1000);
   updateCamera(dt);
   sky.position.copy(camera.position);
   renderer.render(scene, camera);

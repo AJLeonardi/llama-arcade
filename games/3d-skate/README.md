@@ -11,6 +11,14 @@ the middle, plus a side street on each side (joined by cross streets every 200 m
 round benches you can grind, stairs up and down with handrails, planters and park benches.
 Mile signs tell you how far you've gone.
 
+**Skateland**, an amusement park right by the start (take a cross street to the right-hand side street):
+ride the coaster track up to its station, down the big drop and over the hills (grind its red rails),
+ride round the carousel's platform, drop into the giant halfpipe, grind the food stands' counters, and
+watch the Ferris wheel turn.
+
+**Map:** the round map in the corner turns with you. Tap it (or press M) for the big map: drag it, pinch or
+use ± to zoom, and tap a place to skate straight there (the roof, Skateland, or any mile).
+
 ## How to play
 
 | | Touch (iPad / iPhone) | Keyboard (Mac) |
@@ -26,6 +34,7 @@ Mile signs tell you how far you've gone.
 | Look around | Drag on the right side | Drag the mouse |
 | Back to the roof | ↺ | R |
 | Pause | ⏸ | Esc / P |
+| Map | Tap the round map | M |
 
 Tricks need to be finished before you land, or you fall (and get back up a moment later). Trick, spin and
 air points add up; your best score is saved. **Board** picks one of six boards (some push faster, some

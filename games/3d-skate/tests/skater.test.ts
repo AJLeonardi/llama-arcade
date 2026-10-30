@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { Skater, type Input, type SkateEvent } from '../src/sim/skater';
-import { chunk, CHUNK, CROSS_EVERY, MEGA, MILE, SIDE_X0, SIDE_X1, surfaceAt, type Rail } from '../src/sim/world';
+import { chunk, CHUNK, COASTER, CROSS_EVERY, MEGA, MILE, outside, PARK, SIDE_X0, SIDE_X1, surfaceAt, type Rail } from '../src/sim/world';
 
 const NONE: Input = { steer: 0, throttle: 0, ollie: false, kickflip: false, backflip: false };
 const STATS = { push: 11, pop: 5.2 };
@@ -62,6 +62,23 @@ describe('the mega ramp', () => {
     const ev = run(s, 12, (s) => ({ throttle: s.z < 0 ? 1 : 0, steer: s.z > 20 ? 1 : 0 }), (e) => e.type === 'bail');
     expect(ev.some((e) => e.type === 'bump')).toBe(true);
     expect(Math.abs(s.x)).toBeLessThan(6.2);
+  });
+});
+
+describe('pushing', () => {
+  test('at top speed you ride along, and push again only once you have slowed down', () => {
+    const s = new Skater(STATS);
+    s.placeAt(0, 300, 0);
+    let flips = 0, last = false, top = 0;
+    run(s, 30, (s) => {
+      if (s.pushing !== last) flips++;
+      last = s.pushing;
+      top = Math.max(top, s.speed);
+      return { throttle: 1 };
+    }, () => false);
+    expect(top).toBeGreaterThan(STATS.push - 0.1);
+    // Pushing switches on and off a handful of times in 30 s, not every step.
+    expect(flips).toBeLessThan(12);
   });
 });
 
@@ -233,10 +250,43 @@ describe('side streets', () => {
     s.air = 0.5;
     const ev = run(s, 2.5);
     const starts = ev.filter((e) => e.type === 'grind-start').length;
-    expect(starts).toBeGreaterThan(0);
+    expect(starts).toBe(1); // one smooth grind from piece to piece, not a clack at every joint
     expect(ev.some((e) => e.type === 'bail')).toBe(false);
     // It follows the curve: by now we've come round toward the far side of the circle.
     expect(Math.hypot(s.x - f!.x, s.z - f!.z)).toBeGreaterThan(5);
+  });
+});
+
+describe('Skateland', () => {
+  test('is next to the start, open from the side street', () => {
+    expect(PARK.z0).toBeLessThan(400);
+    expect(outside(PARK.x0 + 10, (PARK.z0 + PARK.z1) / 2)).toBe(false);
+    expect(outside(PARK.x1 + 1, (PARK.z0 + PARK.z1) / 2)).toBe(true); // the fence
+  });
+
+  test('push up the coaster to the station, ride the drop and the hills to the end', () => {
+    const s = new Skater(STATS);
+    s.placeAt(COASTER.x, COASTER.z0 - 5, 0);
+    const end = COASTER.z0 + COASTER.prof.len;
+    let top = 0;
+    const ev = run(s, 60, (s) => ((top = Math.max(top, s.y)), { throttle: 1, steer: Math.max(-1, Math.min(1, (s.x - COASTER.x) * 0.8 + Math.sin(s.heading) * 2)) }), (e) => e.type === 'bail' || s.z > end + 10);
+    expect(ev.filter((e) => e.type === 'bail')).toEqual([]);
+    expect(top).toBeGreaterThan(11); // made it up to the station
+    expect(s.z).toBeGreaterThan(end);
+  });
+
+  test('a coaster rail is one long grind down the drop', () => {
+    const r = chunk(-2).rails.find((r) => r.a[1] > 10 && r.b[1] < r.a[1] - 0.3)!; // the top of the drop
+    const s = new Skater(STATS);
+    s.mode = 'air';
+    s.x = r.a[0];
+    s.z = r.a[2] + 0.2;
+    s.y = r.a[1] + 0.15;
+    s.vz = 4;
+    s.air = 0.5;
+    const ev = run(s, 3);
+    expect(ev.filter((e) => e.type === 'grind-start').length).toBe(1);
+    expect(s.y).toBeLessThan(r.a[1] - 5); // slid a long way down it
   });
 });
 

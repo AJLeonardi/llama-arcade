@@ -1,13 +1,15 @@
 // Draws the city from the sim's data (`sim/world.ts`), streaming chunks in ahead of the skater and dropping
 // them behind. Each chunk is a handful of merged meshes, one per material.
 import * as THREE from 'three';
-import { CHUNK, CITY_LEN, chunk, chunkIndex, CROSS_W, crossAt, HALF_W, rng, ROOF_Y, SIDE_X0, SIDE_X1, type Building, type Chunk, type Decor, type Look, type Piece, type RampPiece, type RingPiece } from '../sim/world';
+import { CHUNK, CITY_LEN, chunk, chunkIndex, CROSS_W, crossAt, HALF_W, PARK, rng, ROOF_Y, SIDE_X0, SIDE_X1, type Building, type Chunk, type Decor, type Look, type Piece, type RampPiece, type RingPiece } from '../sim/world';
 import { between, Geo, norm } from './geo';
 import { barkMaterial, leafMaterials, treeGeometry } from './trees';
+import { carousel, ferris, gate, kiosk, type Animate } from './park';
+import { canvasTexture } from '../../../../shared/textures';
 import { asphalt, concrete, facade, FACADE_H, FACADE_W, FACADES, plywood, rampSurface, roofTex, textTexture } from './textures';
 
 type V3 = [number, number, number];
-type Key = Look | 'waterTop' | 'asphalt' | 'steel' | 'metal' | 'leaves' | 'bark' | 'bench' | 'lampGlow' | 'water' | 'spray' | 'stone' | `facade${number}`;
+type Key = Look | 'lattice' | 'waterTop' | 'asphalt' | 'steel' | 'metal' | 'leaves' | 'bark' | 'bench' | 'lampGlow' | 'water' | 'spray' | 'stone' | `facade${number}`;
 
 function makeMaterials() {
   const cc = concrete(2), cw = concrete(1), wood = plywood(), ramp = rampSurface(), asp = asphalt();
@@ -18,6 +20,8 @@ function makeMaterials() {
     wood: new THREE.MeshStandardMaterial({ map: wood.map, normalMap: wood.normal, normalScale: new THREE.Vector2(0.6, 0.6), roughness: 0.7 }),
     red: new THREE.MeshStandardMaterial({ map: ramp.map, color: 0xc0392b, roughness: 0.45 }),
     roof: new THREE.MeshStandardMaterial({ map: roofTex(), roughness: 0.95 }),
+    coaster: new THREE.MeshStandardMaterial({ map: ramp.map, color: 0xb8322a, roughness: 0.4 }),
+    lattice: new THREE.MeshStandardMaterial({ map: latticeTex(), roughness: 0.6, metalness: 0.3 }),
     asphalt: new THREE.MeshStandardMaterial({ map: asp.map, normalMap: asp.normal, roughness: 0.95, color: 0xc4c4c4 }),
     steel: new THREE.MeshStandardMaterial({ color: 0x6b7480, metalness: 0.7, roughness: 0.45 }),
     metal: new THREE.MeshStandardMaterial({ color: 0xb8bec6, metalness: 1, roughness: 0.25 }),
@@ -38,8 +42,27 @@ function makeMaterials() {
   return m as Record<Key, THREE.Material>;
 }
 
+/** The coaster's sides: white steel cross-bracing (one tile = 4 m). */
+const latticeTex = () =>
+  canvasTexture(256, (g, s) => {
+    g.fillStyle = '#3b4250';
+    g.fillRect(0, 0, s, s);
+    g.strokeStyle = '#eef0f2';
+    g.lineWidth = 10;
+    g.strokeRect(0, 0, s, s);
+    g.lineWidth = 7;
+    g.beginPath();
+    g.moveTo(0, 0);
+    g.lineTo(s, s);
+    g.moveTo(s, 0);
+    g.lineTo(0, s);
+    g.moveTo(0, s / 2);
+    g.lineTo(s, s / 2);
+    g.stroke();
+  });
+
 /** What each surface look uses on the sides. */
-const SIDE: Record<Look, Key> = { concrete: 'concrete', blue: 'steel', wood: 'wood', red: 'concrete', roof: 'roof', wall: 'wall', water: 'stone' };
+const SIDE: Record<Look, Key> = { concrete: 'concrete', blue: 'steel', wood: 'wood', red: 'concrete', roof: 'roof', wall: 'wall', water: 'stone', coaster: 'lattice', hidden: 'stone' };
 const TILE: Partial<Record<Key, number>> = { concrete: 4, wall: 4, blue: 4, wood: 2, red: 4, roof: 8, asphalt: 8 };
 
 // ---------------------------------------------------------------- props (one geometry each, copied into chunks)
@@ -209,6 +232,7 @@ function addRing(b: Batch, p: RingPiece) {
 }
 
 function addPiece(b: Batch, p: Piece) {
+  if (p.look === 'hidden') return; // solid, but drawn as something else (a ride, a stand)
   if (p.kind === 'ramp') return addRamp(b, p);
   if (p.kind === 'ring') return addRing(b, p);
   if (p.look === 'roof') return; // drawn as a building
@@ -272,7 +296,33 @@ function place(x: number, y: number, z: number, rot = 0) {
   return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rot), new THREE.Vector3(1, 1, 1));
 }
 
+/** The moving rides, animated every frame (Skateland never unloads). */
+const animators: Animate[] = [];
+
 function addDecor(b: Batch, d: Decor, extra: THREE.Object3D[]) {
+  const put = (o: THREE.Object3D) => {
+    o.position.set(d.x, 0, d.z);
+    extra.push(o);
+  };
+  if (d.kind === 'gate') return put(gate(d.text ?? ''));
+  if (d.kind === 'kiosk') return put(kiosk(d.text ?? '', Math.round(d.z)));
+  if (d.kind === 'carousel' || d.kind === 'ferris') {
+    const [o, anim] = d.kind === 'carousel' ? carousel() : ferris();
+    put(o);
+    animators.push(anim);
+    return;
+  }
+  if (d.kind === 'fence') {
+    // Posts and two rails, waist high.
+    const a: V3 = [d.x, 0, d.z], c: V3 = [d.x1 ?? d.x, 0, d.z1 ?? d.z];
+    const len = Math.hypot(c[0] - a[0], c[2] - a[2]), n = Math.max(1, Math.round(len / 2.5));
+    for (let i = 0; i <= n; i++) {
+      const x = a[0] + ((c[0] - a[0]) * i) / n, z = a[2] + ((c[2] - a[2]) * i) / n;
+      b.get('steel').add(new THREE.CylinderGeometry(0.04, 0.04, 1, 6), between([x, 0, z], [x, 1.2, z]));
+    }
+    for (const y of [0.55, 1.15]) b.get('steel').add(new THREE.CylinderGeometry(0.03, 0.03, 1, 6), between([a[0], y, a[2]], [c[0], y, c[2]]));
+    return;
+  }
   if (d.kind === 'lamp') {
     const lp = lampParts(), m = place(d.x, 0.15, d.z, d.rot);
     for (const g of lp.metal) b.get('steel').add(g, m);
@@ -322,7 +372,7 @@ function skyline(i: number): Building[] {
   const out: Building[] = [];
   for (let k = 0; k < 4; k++) {
     const side = k % 2 ? 1 : -1;
-    const x = side * (190 + r() * 300), z = i * CHUNK + r() * CHUNK;
+    const x = side * (PARK.x1 + 40 + r() * 300), z = i * CHUNK + r() * CHUNK; // beyond Skateland
     const w = 20 + r() * 25, d = 20 + r() * 25;
     out.push({ x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1: z + d / 2, h: 40 + r() * r() * 220, style: Math.floor(r() * FACADES.length) });
   }
@@ -356,6 +406,10 @@ function buildChunk(c: Chunk, mats: Record<Key, THREE.Material>) {
     }
     for (const bl of skyline(c.i)) addBuilding(b, bl);
     if (z0 + CHUNK > CITY_LEN) addBuilding(b, { x0: -170, x1: 170, z0: CITY_LEN, z1: CITY_LEN + 40, h: 60, style: 3 });
+  } else if (c.i === -2) {
+    // Skateland's paving.
+    const { x0, x1, z0, z1 } = PARK;
+    b.get('concrete').quad([[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], [0, 1, 0], [[x0 / 4, z0 / 4], [x1 / 4, z0 / 4], [x1 / 4, z1 / 4], [x0 / 4, z1 / 4]]);
   } else {
     for (const bl of START_BUILDINGS) addBuilding(b, bl);
   }
@@ -391,12 +445,18 @@ export class CityView {
     ground.receiveShadow = true;
     this.root.add(ground);
     this.load(-1);
+    this.load(-2); // Skateland
   }
 
   private load(i: number) {
     const g = buildChunk(chunk(i), this.mats);
     this.loaded.set(i, g);
     this.root.add(g);
+  }
+
+  /** Turns the rides. */
+  animate(dt: number, t: number) {
+    for (const a of animators) a(dt, t);
   }
 
   /** Keep the chunks around street position z built. Builds at most `budget` new ones. */

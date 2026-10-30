@@ -21,7 +21,7 @@ export const CROSS_EVERY = 200;
 export const CROSS_W = 20;
 
 /** How a surface is painted. */
-export type Look = 'concrete' | 'blue' | 'wood' | 'red' | 'roof' | 'wall' | 'water';
+export type Look = 'concrete' | 'blue' | 'wood' | 'red' | 'roof' | 'wall' | 'water' | 'coaster' | 'hidden';
 
 export interface Profile {
   s: number[];
@@ -84,9 +84,12 @@ export interface Rail {
 }
 
 export interface Decor {
-  kind: 'lamp' | 'tree' | 'bench' | 'mile' | 'banner' | 'fountain' | 'planterTree';
+  kind: 'lamp' | 'tree' | 'bench' | 'mile' | 'banner' | 'fountain' | 'planterTree' | 'gate' | 'fence' | 'carousel' | 'ferris' | 'kiosk';
   x: number;
   z: number;
+  /** The far end, for things that run along a line (fences). */
+  x1?: number;
+  z1?: number;
   rot?: number;
   text?: string;
 }
@@ -264,6 +267,94 @@ function startPieces(): Chunk {
   // A rail along the landing deck, for anyone brave enough.
   rails.push({ a: [hw - 1.2, MEGA.landH + 0.4, MEGA.landS + 2], b: [hw - 1.2, MEGA.landH + 0.4, MEGA.landS + MEGA.deck - 1] });
   return { i: -1, pieces, rails, decor: [{ kind: 'banner', x: 0, z: 2, text: 'SKATE CITY' }], buildings: [] };
+}
+
+// ---------------------------------------------------------------- Skateland, the amusement park
+
+/**
+ * Skateland: an amusement park you can skate, open along the outside of the right-hand side street (+x),
+ * close to the start. In it: a coaster track you ride (up to a station, a big drop, hills, a kicker at the
+ * end) with grindable rails along both edges; a carousel with a round platform to ride and grind; a giant
+ * halfpipe; a Ferris wheel (to look at); food stands with grindable counters.
+ */
+export const PARK = { x0: SIDE_X1, x1: SIDE_X1 + 160, z0: 240, z1: 620 };
+
+/** The coaster track's profile: up to the station, the big drop, three hills, a kicker. */
+export const COASTER = (() => {
+  const deg = (d: number) => (d * Math.PI) / 180;
+  const b = new ProfileBuilder(0)
+    .flat(1)
+    .slope(deg(9), 12)
+    .flat(10)
+    .arc(14, 0, -deg(40), 0.5);
+  b.slope(-deg(40), -(b.top - 1.2 - 26 * (1 - Math.cos(deg(40)))));
+  b.arc(26, -deg(40), deg(30), 0.5)
+    .arc(20, deg(30), -deg(30), 0.5)
+    .arc(24, -deg(30), deg(26), 0.5)
+    .arc(18, deg(26), -deg(26), 0.5)
+    .arc(24, -deg(26), 0, 0.5)
+    .flat(8)
+    .arc(10, 0, deg(28), 0.5);
+  return { prof: b.build(), x: PARK.x0 + 132, z0: PARK.z0 + 12, w: 5 };
+})();
+
+function parkPieces(): Chunk {
+  const pieces: Piece[] = [];
+  const rails: Rail[] = [];
+  const decor: Decor[] = [];
+  const o: Out = { pieces, rails };
+  const { x0, x1, z0, z1 } = PARK;
+  // The gate, facing the side street, and a fence round the other three sides.
+  decor.push({ kind: 'gate', x: x0 + 2, z: z0 + 140, text: 'SKATELAND' });
+  decor.push({ kind: 'fence', x: x0 + 0.5, z: z0, x1, z1: z0 }, { kind: 'fence', x: x1, z: z0, x1, z1 }, { kind: 'fence', x: x0 + 0.5, z: z1, x1, z1 });
+  // The coaster: a ramp you ride, red rails along both edges (grindable; they also keep you on it).
+  const C = COASTER;
+  pieces.push({ kind: 'ramp', x0: C.x - C.w / 2, x1: C.x + C.w / 2, z0: C.z0, z1: C.z0 + C.prof.len, axis: 'z', s0: C.z0, dir: 1, prof: C.prof, look: 'coaster' });
+  for (const side of [-1, 1]) {
+    const rx = C.x + side * (C.w / 2 - 0.3);
+    let last = 0;
+    const pts = C.prof.s.map((s, i) => [s, C.prof.h[i]] as const).filter(([s], i, all) => {
+      if (i === 0 || i === all.length - 1 || s - last >= 1.5) return (last = s), true;
+      return false;
+    });
+    for (let i = 0; i + 1 < pts.length; i++) {
+      if (pts[i + 1][1] < 0.05 && pts[i][1] < 0.05) continue; // not on the flat start
+      rails.push({ a: [rx, pts[i][1] + 0.35, C.z0 + pts[i][0]], b: [rx, pts[i + 1][1] + 0.35, C.z0 + pts[i + 1][0]] });
+    }
+  }
+  // The carousel: a round platform to ride round (its middle, with the horses, is fenced off) and grind.
+  const cx = x0 + 45, cz = z0 + 70;
+  pieces.push({ kind: 'ring', x0: cx - 7.5, x1: cx + 7.5, z0: cz - 7.5, z1: cz + 7.5, cx, cz, r0: 0, r1: 7.5, top: 0.4, look: 'wood' });
+  pieces.push({ kind: 'ring', x0: cx - 5, x1: cx + 5, z0: cz - 5, z1: cz + 5, cx, cz, r0: 0, r1: 5, top: 2.2, look: 'hidden' });
+  ringRail(o, cx, cz, 7.5, 0.4, 32);
+  decor.push({ kind: 'carousel', x: cx, z: cz });
+  // A giant halfpipe across the park, its two walls facing each other.
+  const hz = z0 + 205, hlen = 24, R = 4.5;
+  const qp = new ProfileBuilder().arc(R, 0, deg(84), 0.15).build();
+  const qtop = qp.h[qp.h.length - 1], flat = 9, hx = x0 + 30;
+  for (const dir of [-1, 1] as const) {
+    const s0 = hx + dir * (flat / 2);
+    const end = s0 + dir * qp.len;
+    pieces.push({ kind: 'ramp', x0: Math.min(s0, end), x1: Math.max(s0, end), z0: hz, z1: hz + hlen, axis: 'x', s0, dir, prof: qp, look: 'blue', coping: true });
+    pieces.push({ kind: 'box', x0: Math.min(end, end + dir * 2.5), x1: Math.max(end, end + dir * 2.5), z0: hz, z1: hz + hlen, top: qtop, look: 'concrete' });
+  }
+  // Food stands with counters you can grind.
+  const stands = ['POPCORN', 'ICE CREAM', 'PIZZA', 'LEMONADE'];
+  stands.forEach((text, k) => {
+    const sx = x0 + 80, sz = z0 + 150 + k * 16;
+    pieces.push({ kind: 'box', x0: sx, x1: sx + 4, z0: sz - 2.5, z1: sz + 2.5, top: 3, look: 'hidden' });
+    ledgeZ(o, sx - 0.5, 1, sz - 2.5, 5, 0.85, 'wood');
+    decor.push({ kind: 'kiosk', x: sx, z: sz, text });
+  });
+  // The Ferris wheel, behind a little fence (its gondolas come down low).
+  const fx = x0 + 70, fz = z1 - 50;
+  pieces.push({ kind: 'box', x0: fx - 9, x1: fx + 9, z0: fz - 9, z1: fz + 9, top: 1.2, look: 'hidden' });
+  decor.push({ kind: 'ferris', x: fx, z: fz });
+  decor.push({ kind: 'fence', x: fx - 9, z: fz - 9, x1: fx + 9, z1: fz - 9 }, { kind: 'fence', x: fx + 9, z: fz - 9, x1: fx + 9, z1: fz + 9 }, { kind: 'fence', x: fx + 9, z: fz + 9, x1: fx - 9, z1: fz + 9 }, { kind: 'fence', x: fx - 9, z: fz + 9, x1: fx - 9, z1: fz - 9 });
+  // Some trees, lamps and benches round the paths.
+  for (let z = z0 + 10; z < z1; z += 30) decor.push({ kind: 'tree', x: x1 - 6, z }, { kind: 'lamp', x: x0 + 110, z: z + 15, rot: 0 });
+  for (let x = x0 + 20; x < x1 - 10; x += 26) decor.push({ kind: 'tree', x, z: z0 + 5 }, { kind: 'tree', x, z: z1 - 5 });
+  return { i: -2, pieces, rails, decor, buildings: [] };
 }
 
 // ---------------------------------------------------------------- the city, a chunk at a time
@@ -464,6 +555,14 @@ function buildingsAlong(r: () => number, z0: number, z1: number, xa: number, dir
 
 /** Every building in 100 m of street: the blocks between the streets, and the row outside the side streets. */
 function chunkBuildings(r: () => number, z0: number, z1: number, out: Building[]) {
+  // Outside the right-hand side street, Skateland takes the place of the buildings.
+  const outer = (side: number): [number, number][] => {
+    if (side < 0 || z1 <= PARK.z0 || z0 >= PARK.z1) return [[z0, z1]];
+    const parts: [number, number][] = [];
+    if (z0 < PARK.z0) parts.push([z0, PARK.z0]);
+    if (z1 > PARK.z1) parts.push([PARK.z1, z1]);
+    return parts;
+  };
   // Leave the cross streets open.
   const spans: [number, number][] = [];
   let z = z0;
@@ -475,15 +574,17 @@ function chunkBuildings(r: () => number, z0: number, z1: number, out: Building[]
   }
   for (const side of [-1, 1]) {
     for (const [a, b] of spans) buildingsAlong(r, a, b, side * HALF_W, side, SIDE_X0 - HALF_W, out);
-    buildingsAlong(r, z0, z1, side * SIDE_X1, side, null, out);
+    for (const [a, b] of outer(side)) buildingsAlong(r, a, b, side * SIDE_X1, side, null, out);
   }
 }
 
 const cache = new Map<number, Chunk>();
 let start: Chunk | null = null;
+let park: Chunk | null = null;
 
 /** The chunk holding street position z (z from i*CHUNK to (i+1)*CHUNK). Chunk -1 is the start area. */
 export function chunk(i: number): Chunk {
+  if (i === -2) return (park ??= parkPieces());
   if (i < 0) return (start ??= startPieces());
   let c = cache.get(i);
   if (c) return c;
@@ -553,10 +654,12 @@ export const chunkIndex = (z: number) => (z < 0 ? -1 : Math.floor(z / CHUNK));
 const START_REACH = MEGA.end + 2; // the start area's pieces reach this far down the street
 
 /** Every chunk whose pieces might cover street position z. */
-function chunksAt(z: number): Chunk[] {
+function chunksAt(z: number, x = 0): Chunk[] {
   const i = chunkIndex(z);
   if (i < 0) return [chunk(-1)];
-  return z < START_REACH ? [chunk(-1), chunk(i)] : [chunk(i)];
+  const out = z < START_REACH ? [chunk(-1), chunk(i)] : [chunk(i)];
+  if (x > PARK.x0 - 10 && z > PARK.z0 - 10 && z < PARK.z1 + 10) out.push(chunk(-2));
+  return out;
 }
 
 export interface Surface {
@@ -575,6 +678,7 @@ export function outside(x: number, z: number) {
   if (z < 0) return ax > HALF_W; // the start: the roof and its neighbours
   if (ax <= HALF_W) return false; // the main street
   if (ax >= SIDE_X0 && ax <= SIDE_X1) return false; // a side street
+  if (x >= PARK.x0 && x <= PARK.x1 && z >= PARK.z0 && z <= PARK.z1) return false; // Skateland
   return !(ax <= SIDE_X1 && crossAt(z)); // a cross street
 }
 
@@ -593,7 +697,7 @@ export function surfaceAt(x: number, z: number, feet: number): Surface {
       if (feet + STEP_UP < 50) out.wall = true;
     }
   }
-  for (const c of chunksAt(z)) {
+  for (const c of chunksAt(z, x)) {
     for (const p of c.pieces) {
       const g = pieceAt(p, x, z);
       if (!g) continue;
@@ -610,8 +714,8 @@ export function surfaceAt(x: number, z: number, feet: number): Surface {
 }
 
 /** Rails that might be near street position z. */
-export function railsAt(z: number): Rail[] {
-  const cs = chunksAt(z);
+export function railsAt(z: number, x = 0): Rail[] {
+  const cs = chunksAt(z, x);
   if (cs.length === 1) return cs[0].rails;
   return cs.flatMap((c) => c.rails);
 }

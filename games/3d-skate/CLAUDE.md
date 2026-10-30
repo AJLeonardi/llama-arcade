@@ -20,15 +20,20 @@ A realistic-looking 3D skateboarding game (three.js, TypeScript, no physics engi
     `SIDE_FEATURES` (fountain with a grindable round bench and basin rim, stairs up and down with
     handrails and a hubba ledge, planters, benches with a kinked rail, bank-to-ledge), the cross streets a
     ledge or rail; lamps/trees/benches, mile signs, buildings filling the blocks (`chunkBuildings`).
-    Pieces are `box`, `ramp` or `ring` (round, flat-topped: fountain bench and basin). Chunk -1 is the start area. `surfaceAt(x, z, feet)` = the highest surface at most `STEP_UP`
+    Pieces are `box`, `ramp` or `ring` (round, flat-topped: fountain bench and basin). Look `hidden` is solid
+    but drawn as something else (a ride, a stand). Chunk -2 is Skateland (`PARK`, `parkPieces`): an
+    amusement park beside the right-hand side street near the start, with the `COASTER` track (ridden
+    like a ramp, red rails on both edges), carousel platform, giant halfpipe, food stands, Ferris wheel. Chunk -1 is the start area. `surfaceAt(x, z, feet)` = the highest surface at most `STEP_UP`
     above `feet`, and `wall` if something is taller; `railsAt(z)`.
   - `skater.ts`: `Skater`, stepped at 120 Hz. Modes `ground` (rolls along `heading` at `speed`, gravity
     along the slope, auto-turns round when rolling backwards), `air` (leaves the ground when it drops away
     faster than gravity: lips, ledges, stairs), `grind` (locked to a `Rail`), `bail` (slides, then gets up
     where it is or at the last flat spot). Tricks: `kick` (kickflip progress), `pitch`/`flipping`
-    (backflip), `spun` (air spins); `land()` checks they're finished and scores them. Walls are checked at the board's
+    (backflip), `spun` (air spins); `land()` checks they're finished and scores them. A grind runs on
+    from one rail piece onto the next that starts where it ends (`nextRail`), so curved and bent rails
+    (fountain benches, the coaster) are one smooth grind. Walls are checked at the board's
     nose (`REACH` ahead), so the board and body stop at a ramp's side instead of sinking in: glance off,
-    or "Bonk!" head-on above 7 m/s. Rails are solid when you're not grinding (`railCrossed`): ride into
+    or "Bonk!" head-on above 7 m/s. At top pushing speed `cruising` stops pushing until you have slowed by `PUSH_AGAIN`, so the pose does not flicker between pushing and riding. Rails are solid when you're not grinding (`railCrossed`): ride into
     one and you glance off (or fall, head-on and fast); clip one in the air and you bounce back. Events go to `events` for sounds and pop-ups.
 - `src/view/`: three.js.
   - `city.ts`: `CityView` streams chunks (2 behind, 6 ahead, one built per frame) and draws exactly the
@@ -46,8 +51,12 @@ A realistic-looking 3D skateboarding game (three.js, TypeScript, no physics engi
   - `trees.ts`: street trees: a forked bark trunk and a crown of two-sided leaf cards painted from the leaf
     photo (`leaves_broad.webp`, copied from Llama Drive), normals pointing out of the crown so it shades
     like a ball; a depth material so shadows show the gaps. Four shapes (`TREE_KINDS` in `city.ts`).
+  - `park.ts`: Skateland's rides and props (gate, carousel, Ferris wheel, food stands); the moving ones
+    return an `Animate` that `CityView.animate` calls every frame.
   - `geo.ts`: `Geo`, a quad/geometry merger.
-- `src/ui/`: `ui.ts` (title, board picker, skater maker, pause, HUD, trick buttons, pop-ups), `sfx.ts`
+- `src/ui/`: `ui.ts` (title, board picker, skater maker, pause, HUD, trick buttons, pop-ups), `map.ts`
+  (`CityMap`: round heading-up mini-map, big map with drag/pinch/± and `PLACES` to skate straight to, all
+  drawn from the world data; M opens it), `sfx.ts`
   (wheel roll and grind noise, pop, clack, its own AudioContext since it needs noise), `style.css`.
 - `src/main.ts`: renderer (ACES tone mapping, PCF soft shadows following the skater), the `Sky` and a
   PMREM environment made from it, fixed-step loop with interpolation, chase camera, events → sounds and

@@ -3,7 +3,7 @@ import { BUILD } from '../../../../shared/pwa';
 import { BOARDS, deckCanvas } from '../view/textures';
 import { HAIR, HELMET, PANTS, SHIRT, SHOES, SKIN, type Look } from '../view/skaterModel';
 
-export type Screen = 'title' | 'boards' | 'skater' | 'play' | 'pause';
+export type Screen = 'title' | 'boards' | 'skater' | 'play' | 'pause' | 'map';
 
 export interface UIHandlers {
   start(): void;
@@ -74,7 +74,7 @@ export class UI {
     };
     this.ollieBtn = tb('ollie', 'OLLIE', 'ollie');
     tricks.append(tb('kickflip', 'KICK\nFLIP', 'kickflip'), tb('backflip', 'BACK\nFLIP', 'backflip'), this.ollieBtn);
-    const hint = h('div', 'hint', 'Left thumb: push ↑ · steer ←→ · brake ↓');
+    const hint = h('div', 'hint', 'Left thumb: push ↑ · steer ←→ · brake ↓ · M: map');
     hud.append(this.scoreEl, this.milesEl, pause, restart, this.popupEl, tricks, hint, this.updateButton());
     this.add('play', hud);
 
@@ -169,7 +169,7 @@ export class UI {
     this.show('title');
   }
 
-  private add(s: Screen, el: HTMLElement) {
+  add(s: Screen, el: HTMLElement) {
     this.screens.set(s, el);
     this.root.append(el);
   }
