@@ -4,7 +4,7 @@
 // On the ground the board rolls along its heading: `speed` is how fast, and gravity pulls along the slope.
 // When the ground drops away faster than gravity can pull the board down (a ramp's lip, a ledge, a stair),
 // the skater flies; landing projects the velocity back onto the new ground.
-import { HALF_W, railsAt, SPAWN, surfaceAt, type Rail } from './world';
+import { outside, railsAt, SPAWN, surfaceAt, type Rail } from './world';
 
 export const G = 9.8;
 export const STEP = 1 / 120;
@@ -239,7 +239,7 @@ export class Skater {
       headOn = 1;
       this.heading += Math.PI;
     }
-    const boundary = Math.abs(nx) > HALF_W - 0.01; // the building fronts are gentle
+    const boundary = outside(nx, nz); // the building fronts are gentle
     if (!boundary && headOn > 0.75 && this.speed > 7) return this.bail('Bonk!');
     this.speed *= boundary ? 0.7 : 0.4;
     this.events.push({ type: 'bump' });

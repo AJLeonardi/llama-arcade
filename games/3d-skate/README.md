@@ -4,9 +4,11 @@ Designed by Mariano. A skateboarding game that tries to look real: a sunny city 
 reflect the sky, photo asphalt, concrete, and soft shadows.
 
 You start on the roof of a 120 m skyscraper. Push off and drop in on the giant **blue ramp** that runs down
-the building, then shoots up a kicker and throws you high over the street: do kickflips and backflips
-before you land on the landing ramp. Then skate the city: **10 miles** of street full of rails, ledges,
-quarter pipes, mini ramps, fun boxes, stair sets with handrails, and big blue jumps down the middle.
+the building and, halfway down, shoots up a kicker that throws you high over a gap: do kickflips and
+backflips before you land on the tall landing ramp. Then skate the city: a **10-mile** main street full of
+rails, ledges, quarter pipes, mini ramps, fun boxes, stair sets with handrails, and big blue jumps down
+the middle, plus a side street on each side (joined by cross streets every 200 m) with fountains whose
+round benches you can grind, stairs up and down with handrails, planters and park benches.
 Mile signs tell you how far you've gone.
 
 ## How to play

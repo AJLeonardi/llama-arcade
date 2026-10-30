@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { Skater, type Input, type SkateEvent } from '../src/sim/skater';
-import { chunk, CHUNK, MEGA, MILE, surfaceAt, type Rail } from '../src/sim/world';
+import { chunk, CHUNK, CROSS_EVERY, MEGA, MILE, SIDE_X0, SIDE_X1, surfaceAt, type Rail } from '../src/sim/world';
 
 const NONE: Input = { steer: 0, throttle: 0, ollie: false, kickflip: false, backflip: false };
 const STATS = { push: 11, pop: 5.2 };
@@ -21,7 +21,7 @@ function run(s: Skater, secs: number, input: (s: Skater, t: number) => Partial<I
 const landOrBail = (e: SkateEvent) => e.type === 'land' || e.type === 'bail';
 
 describe('the mega ramp', () => {
-  test('pushing off the roof flies off the kicker and lands on the landing ramp', () => {
+  test('pushing off the roof flies off the kicker, over the gap, and lands on the landing ramp', () => {
     const s = new Skater(STATS);
     let pushed = false;
     const ev = run(s, 40, (s) => ({ throttle: s.z < 0 ? 1 : 0 }), (e) => {
@@ -31,8 +31,10 @@ describe('the mega ramp', () => {
     const land = ev.find((e) => e.type === 'land' && e.air > 2);
     expect(ev.some((e) => e.type === 'bail')).toBe(false);
     expect(land).toBeDefined();
-    expect(s.z).toBeGreaterThan(MEGA.lipS + 14); // past the table, on the slope down
-    expect(s.z).toBeLessThan(MEGA.prof.len);
+    expect(s.z).toBeGreaterThan(MEGA.landS + MEGA.deck); // cleared the gap and the deck: on the slope down
+    expect(s.z).toBeLessThan(MEGA.end);
+    expect(MEGA.lipH).toBeGreaterThan(55); // the kicker is about halfway down the building
+    expect(MEGA.lipH).toBeLessThan(80);
     if (land?.type === 'land') expect(land.air).toBeGreaterThan(3.5); // lots of time for tricks
   });
 
@@ -67,8 +69,8 @@ describe('tricks on flat ground', () => {
   const flat = () => {
     const s = new Skater(STATS);
     s.x = 0;
-    s.z = 260;
-    s.y = surfaceAt(0, 260, 1).h;
+    s.z = 290;
+    s.y = surfaceAt(0, 290, 1).h;
     s.speed = 6;
     return s;
   };
@@ -110,7 +112,7 @@ describe('rails', () => {
   /** The first flat street rail (the "flat rail" feature) in the city. */
   function findRail(): Rail {
     for (let i = 3; i < 200; i++) {
-      const r = chunk(i).rails.find((r) => !r.edge && r.a[1] === 0.45 && r.b[1] === 0.45);
+      const r = chunk(i).rails.find((r) => !r.edge && r.a[0] === r.b[0] && r.a[1] === 0.45 && r.b[1] === 0.45);
       if (r) return r;
     }
     throw new Error('no flat rail');
@@ -184,6 +186,60 @@ describe('bumping into things', () => {
   });
 });
 
+describe('side streets', () => {
+  test('a cross street takes you from the main street to the side street', () => {
+    // The first crossing with a clear line across (nothing in the way at ground level).
+    let z = 0;
+    for (let n = 2; n < 40 && !z; n++) {
+      const zz = n * CROSS_EVERY + 3;
+      let clear = true;
+      for (let x = 0; x < SIDE_X0 + 8; x += 0.5) if (surfaceAt(x, zz, 0).wall || surfaceAt(x, zz, 0).h > 0.2) clear = false;
+      if (clear) z = zz;
+    }
+    expect(z).toBeGreaterThan(0);
+    const s = new Skater(STATS);
+    s.x = 0;
+    s.z = z;
+    s.y = 0;
+    s.heading = Math.PI / 2; // +x
+    const ev = run(s, 20, (s) => ({ throttle: 1, steer: Math.max(-1, Math.min(1, (s.heading - Math.PI / 2) * 3)) }), () => s.x > SIDE_X0 + 6);
+    expect(ev.some((e) => e.type === 'bail')).toBe(false);
+    expect(s.x).toBeGreaterThan(SIDE_X0 + 6);
+  });
+
+  test('the buildings beyond the side street are solid', () => {
+    const s = new Skater(STATS);
+    s.x = SIDE_X1 - 6;
+    s.z = 3 * CROSS_EVERY + 100;
+    s.y = surfaceAt(s.x, s.z, 1).h;
+    s.heading = Math.PI / 2;
+    s.speed = 6;
+    let furthest = 0;
+    run(s, 4, (s) => ((furthest = Math.max(furthest, s.x)), { throttle: 1 }));
+    expect(furthest).toBeLessThan(SIDE_X1);
+  });
+
+  test('you can grind the round bench around a fountain', () => {
+    let f: { x: number; z: number } | undefined;
+    for (let i = 3; i < 200 && !f; i++) f = chunk(i).decor.find((d) => d.kind === 'fountain');
+    expect(f).toBeDefined();
+    const s = new Skater(STATS);
+    // Dropping onto the bench's outer edge, going round it.
+    s.mode = 'air';
+    s.x = f!.x + 6.1;
+    s.z = f!.z - 0.4;
+    s.y = 0.7;
+    s.vz = 5;
+    s.air = 0.5;
+    const ev = run(s, 2.5);
+    const starts = ev.filter((e) => e.type === 'grind-start').length;
+    expect(starts).toBeGreaterThan(0);
+    expect(ev.some((e) => e.type === 'bail')).toBe(false);
+    // It follows the curve: by now we've come round toward the far side of the circle.
+    expect(Math.hypot(s.x - f!.x, s.z - f!.z)).toBeGreaterThan(5);
+  });
+});
+
 describe('the city', () => {
   test('is 10 miles long, with something to skate in every chunk', () => {
     expect(Math.round((MILE * 10) / 100)).toBe(161);
@@ -192,11 +248,11 @@ describe('the city', () => {
 
   test('a robot pushing down the middle for 2 miles never falls (big jumps included)', () => {
     const s = new Skater(STATS);
-    s.z = 260;
+    s.z = 290;
     s.y = 0;
-    const ev = run(s, 400, (s) => ({ throttle: 1, steer: Math.max(-1, Math.min(1, s.x * 0.5 + Math.sin(s.heading) * 2)) }), (e) => e.type === 'bail' || s.z > 260 + 2 * MILE);
+    const ev = run(s, 400, (s) => ({ throttle: 1, steer: Math.max(-1, Math.min(1, s.x * 0.5 + Math.sin(s.heading) * 2)) }), (e) => e.type === 'bail' || s.z > 290 + 2 * MILE);
     expect(ev.filter((e) => e.type === 'bail')).toEqual([]);
-    expect(s.z).toBeGreaterThan(260 + 2 * MILE - CHUNK);
+    expect(s.z).toBeGreaterThan(290 + 2 * MILE - CHUNK);
     expect(ev.filter((e) => e.type === 'land' && e.air > 0.6).length).toBeGreaterThan(3); // flew off the big jumps
   });
 

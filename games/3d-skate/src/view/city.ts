@@ -1,13 +1,13 @@
 // Draws the city from the sim's data (`sim/world.ts`), streaming chunks in ahead of the skater and dropping
 // them behind. Each chunk is a handful of merged meshes, one per material.
 import * as THREE from 'three';
-import { CHUNK, CITY_LEN, chunk, chunkIndex, HALF_W, rng, ROOF_Y, type Building, type Chunk, type Decor, type Look, type Piece, type RampPiece } from '../sim/world';
+import { CHUNK, CITY_LEN, chunk, chunkIndex, CROSS_W, crossAt, HALF_W, rng, ROOF_Y, SIDE_X0, SIDE_X1, type Building, type Chunk, type Decor, type Look, type Piece, type RampPiece, type RingPiece } from '../sim/world';
 import { between, Geo, norm } from './geo';
 import { barkMaterial, leafMaterials, treeGeometry } from './trees';
 import { asphalt, concrete, facade, FACADE_H, FACADE_W, FACADES, plywood, rampSurface, roofTex, textTexture } from './textures';
 
 type V3 = [number, number, number];
-type Key = Look | 'asphalt' | 'steel' | 'metal' | 'leaves' | 'bark' | 'bench' | 'lampGlow' | `facade${number}`;
+type Key = Look | 'waterTop' | 'asphalt' | 'steel' | 'metal' | 'leaves' | 'bark' | 'bench' | 'lampGlow' | 'water' | 'spray' | 'stone' | `facade${number}`;
 
 function makeMaterials() {
   const cc = concrete(2), cw = concrete(1), wood = plywood(), ramp = rampSurface(), asp = asphalt();
@@ -25,6 +25,10 @@ function makeMaterials() {
     bark: barkMaterial(),
     bench: new THREE.MeshStandardMaterial({ map: wood.map, color: 0xb07a4a, roughness: 0.75 }),
     lampGlow: new THREE.MeshStandardMaterial({ color: 0xfff3d6, emissive: 0xfff0cc, emissiveIntensity: 1.5 }),
+    waterTop: new THREE.MeshStandardMaterial({ color: 0x2b5a6e, roughness: 0.04, metalness: 0.4 }),
+    water: new THREE.MeshStandardMaterial({ color: 0x2b5a6e, roughness: 0.04, metalness: 0.4, transparent: true, opacity: 0.88 }),
+    spray: new THREE.MeshStandardMaterial({ color: 0xeaf6ff, roughness: 0.2, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide }),
+    stone: new THREE.MeshStandardMaterial({ map: cw.map, normalMap: cw.normal, color: 0xd9d2c3, roughness: 0.7 }),
   };
   FACADES.forEach((st, i) => {
     const f = facade(i);
@@ -35,7 +39,7 @@ function makeMaterials() {
 }
 
 /** What each surface look uses on the sides. */
-const SIDE: Record<Look, Key> = { concrete: 'concrete', blue: 'steel', wood: 'wood', red: 'concrete', roof: 'roof', wall: 'wall' };
+const SIDE: Record<Look, Key> = { concrete: 'concrete', blue: 'steel', wood: 'wood', red: 'concrete', roof: 'roof', wall: 'wall', water: 'stone' };
 const TILE: Partial<Record<Key, number>> = { concrete: 4, wall: 4, blue: 4, wood: 2, red: 4, roof: 8, asphalt: 8 };
 
 // ---------------------------------------------------------------- props (one geometry each, copied into chunks)
@@ -61,6 +65,32 @@ const treeParts = (() => {
     const k = ((i % TREE_KINDS) + TREE_KINDS) % TREE_KINDS;
     if (!made[k]) made[k] = { ...treeGeometry(k), grate: new THREE.BoxGeometry(1.4, 0.04, 1.4).translate(0, 0.17, 0) };
     return made[k];
+  };
+})();
+
+const fountainParts = (() => {
+  let made: { stone: THREE.BufferGeometry[]; water: THREE.BufferGeometry[]; spray: THREE.BufferGeometry[] } | null = null;
+  return () => {
+    if (made) return made;
+    const bowl = (r: number, y: number) =>
+      new THREE.LatheGeometry([new THREE.Vector2(0.2, -0.3), new THREE.Vector2(r * 0.7, -0.2), new THREE.Vector2(r, 0.05), new THREE.Vector2(r * 0.97, 0.1), new THREE.Vector2(0.01, 0.0)].map((v) => v.clone()), 32).translate(0, y, 0);
+    const stone = [
+      new THREE.CylinderGeometry(0.45, 0.6, 1.6, 20).translate(0, 0.8, 0),
+      bowl(1.7, 1.7),
+      new THREE.CylinderGeometry(0.18, 0.26, 1.0, 16).translate(0, 2.2, 0),
+      bowl(0.75, 2.75),
+      new THREE.SphereGeometry(0.16, 14, 10).translate(0, 3.0, 0),
+    ];
+    const water = [
+      new THREE.CircleGeometry(1.6, 32).rotateX(-Math.PI / 2).translate(0, 1.78, 0),
+      new THREE.CircleGeometry(0.7, 24).rotateX(-Math.PI / 2).translate(0, 2.83, 0),
+    ];
+    const spray = [
+      new THREE.CylinderGeometry(0.75, 0.95, 1.0, 24, 1, true).translate(0, 2.3, 0),
+      new THREE.CylinderGeometry(1.72, 2.1, 1.25, 32, 1, true).translate(0, 1.1, 0),
+      new THREE.CylinderGeometry(0.05, 0.12, 0.5, 10, 1, true).translate(0, 3.3, 0),
+    ];
+    return (made = { stone, water, spray });
   };
 })();
 
@@ -119,7 +149,10 @@ function addRamp(b: Batch, p: RampPiece) {
     const n0 = smooth(i, i - 1), n1 = smooth(i, i + 1);
     const v0 = run / tile, v1 = (run + len) / tile;
     run += len;
-    top.quad(
+    // A flat bit lying on the ground (the foot of the stairs, the run-out of a jump) isn't drawn: the
+    // road is already there, and two surfaces at the same height flicker.
+    const onGround = H[i] < 0.005 && H[i + 1] < 0.005;
+    if (!onGround) top.quad(
       [rampPoint(p, S[i], 0, H[i]), rampPoint(p, S[i], 1, H[i]), rampPoint(p, S[i + 1], 1, H[i + 1]), rampPoint(p, S[i + 1], 0, H[i + 1])],
       [n0, n0, n1, n1],
       [[0, v0], [width / tile, v0], [width / tile, v1], [0, v1]],
@@ -149,8 +182,35 @@ function addRamp(b: Batch, p: RampPiece) {
   }
 }
 
+/** A ring (or disc) with a flat top and straight sides. */
+function addRing(b: Batch, p: RingPiece) {
+  if (p.look === 'water') {
+    // A fountain basin: a stone rim, and the water a little below it.
+    const rim = 0.4, sink = 0.12;
+    addRing(b, { ...p, r0: p.r1 - rim, look: 'stone' as Look });
+    addRing(b, { ...p, r0: 0, r1: p.r1 - rim + 0.01, top: p.top - sink, look: 'waterTop' as Look });
+    return;
+  }
+  const g = b.get(p.look as Key), side = b.get((SIDE as Record<string, Key>)[p.look] ?? 'stone');
+  const N = 40, { cx, cz, r0, r1, top } = p;
+  const at = (a: number, r: number, y: number): V3 => [cx + Math.cos(a) * r, y, cz + Math.sin(a) * r];
+  for (let i = 0; i < N; i++) {
+    const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2;
+    const uv = (a: number, r: number): [number, number] => [(Math.cos(a) * r) / 2, (Math.sin(a) * r) / 2];
+    g.quad([at(a0, r0, top), at(a1, r0, top), at(a1, r1, top), at(a0, r1, top)], [0, 1, 0], [uv(a0, r0), uv(a1, r0), uv(a1, r1), uv(a0, r1)]);
+    const n0: V3 = [Math.cos(a0), 0, Math.sin(a0)], n1: V3 = [Math.cos(a1), 0, Math.sin(a1)];
+    const u0 = (a0 * r1) / 2, u1 = (a1 * r1) / 2;
+    side.quad([at(a0, r1, 0), at(a1, r1, 0), at(a1, r1, top), at(a0, r1, top)], [n0, n1, n1, n0], [[u0, 0], [u1, 0], [u1, top / 2], [u0, top / 2]]);
+    if (r0 > 0) {
+      const m0: V3 = [-n0[0], 0, -n0[2]], m1: V3 = [-n1[0], 0, -n1[2]];
+      side.quad([at(a0, r0, 0), at(a1, r0, 0), at(a1, r0, top), at(a0, r0, top)], [m0, m1, m1, m0], [[u0, 0], [u1, 0], [u1, top / 2], [u0, top / 2]]);
+    }
+  }
+}
+
 function addPiece(b: Batch, p: Piece) {
   if (p.kind === 'ramp') return addRamp(b, p);
+  if (p.kind === 'ring') return addRing(b, p);
   if (p.look === 'roof') return; // drawn as a building
   b.get(p.look).box(p.x0, p.x1, 0, p.top, p.z0, p.z1, TILE[p.look] ?? 4);
 }
@@ -197,7 +257,7 @@ function groundUnder(x: number, z: number, y: number) {
   let h = 0;
   for (const p of currentChunk?.pieces ?? []) {
     if (x < p.x0 || x > p.x1 || z < p.z0 || z > p.z1) continue;
-    if (p.kind === 'box') h = Math.max(h, p.top <= y ? p.top : h);
+    if (p.kind === 'box' || p.kind === 'ring') h = Math.max(h, p.top <= y ? p.top : h);
     else {
       const c = p.axis === 'x' ? x : z, s = (c - p.s0) * p.dir;
       let best = 0;
@@ -222,6 +282,17 @@ function addDecor(b: Batch, d: Decor, extra: THREE.Object3D[]) {
     b.get('bark').add(tp.bark, m);
     b.get('leaves').add(tp.leaves, m);
     b.get('steel').add(tp.grate, m);
+  } else if (d.kind === 'planterTree') {
+    const tp = treeParts(Math.round(d.z / 7) + 1);
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(d.x, 0.55, d.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), d.z), new THREE.Vector3(0.6, 0.6, 0.6));
+    b.get('bark').add(tp.bark, m);
+    b.get('leaves').add(tp.leaves, m);
+  } else if (d.kind === 'fountain') {
+    // Water in the basin, a stone pedestal with two bowls, and sheets of water falling from them.
+    const m = place(d.x, 0, d.z);
+    for (const g of fountainParts().stone) b.get('stone').add(g, m);
+    for (const g of fountainParts().water) b.get('water').add(g, m);
+    for (const g of fountainParts().spray) b.get('spray').add(g, m);
   } else if (d.kind === 'bench') {
     const bp = benchParts(), m = place(d.x, 0.15, d.z, d.rot);
     for (const g of bp.wood) b.get('bench').add(g, m);
@@ -251,7 +322,7 @@ function skyline(i: number): Building[] {
   const out: Building[] = [];
   for (let k = 0; k < 4; k++) {
     const side = k % 2 ? 1 : -1;
-    const x = side * (110 + r() * 300), z = i * CHUNK + r() * CHUNK;
+    const x = side * (190 + r() * 300), z = i * CHUNK + r() * CHUNK;
     const w = 20 + r() * 25, d = 20 + r() * 25;
     out.push({ x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1: z + d / 2, h: 40 + r() * r() * 220, style: Math.floor(r() * FACADES.length) });
   }
@@ -262,9 +333,11 @@ const START_BUILDINGS: Building[] = [
   { x0: -15, x1: 15, z0: -40, z1: 0, h: ROOF_Y, style: 0, noParapet: true },
   { x0: -HALF_W, x1: -15, z0: -40, z1: 0, h: 50, style: 2 },
   { x0: 15, x1: HALF_W, z0: -40, z1: 0, h: 50, style: 4 },
-  { x0: -80, x1: -HALF_W, z0: -40, z1: 0, h: 70, style: 1 },
-  { x0: HALF_W, x1: 80, z0: -40, z1: 0, h: 65, style: 3 },
-  { x0: -80, x1: 80, z0: -90, z1: -40, h: 85, style: 2 },
+  { x0: -SIDE_X0, x1: -HALF_W, z0: -40, z1: 0, h: 70, style: 1 },
+  { x0: HALF_W, x1: SIDE_X0, z0: -40, z1: 0, h: 65, style: 3 },
+  { x0: -170, x1: -SIDE_X0, z0: -40, z1: 0, h: 45, style: 4 },
+  { x0: SIDE_X0, x1: 170, z0: -40, z1: 0, h: 55, style: 2 },
+  { x0: -170, x1: 170, z0: -90, z1: -40, h: 85, style: 2 },
 ];
 
 function buildChunk(c: Chunk, mats: Record<Key, THREE.Material>) {
@@ -275,8 +348,14 @@ function buildChunk(c: Chunk, mats: Record<Key, THREE.Material>) {
     const z0 = c.i * CHUNK, z1 = Math.min(CITY_LEN + 20, z0 + CHUNK);
     const t = 1 / 8;
     b.get('asphalt').quad([[-HALF_W + 4, 0, z0], [HALF_W - 4, 0, z0], [HALF_W - 4, 0, z1], [-HALF_W + 4, 0, z1]], [0, 1, 0], [[(-HALF_W + 4) * t, z0 * t], [(HALF_W - 4) * t, z0 * t], [(HALF_W - 4) * t, z1 * t], [(-HALF_W + 4) * t, z1 * t]]);
+    const road = (xa: number, xb: number, za: number, zb: number) =>
+      b.get('asphalt').quad([[xa, 0, za], [xb, 0, za], [xb, 0, zb], [xa, 0, zb]], [0, 1, 0], [[xa * t, za * t], [xb * t, za * t], [xb * t, zb * t], [xa * t, zb * t]]);
+    for (const side of [-1, 1]) {
+      road(side * SIDE_X0, side * SIDE_X1, z0, z1); // the side street
+      if (crossAt(z0)) road(side * HALF_W, side * SIDE_X0, z0, z0 + CROSS_W); // the cross street
+    }
     for (const bl of skyline(c.i)) addBuilding(b, bl);
-    if (z0 + CHUNK > CITY_LEN) addBuilding(b, { x0: -HALF_W - 30, x1: HALF_W + 30, z0: CITY_LEN, z1: CITY_LEN + 40, h: 60, style: 3 });
+    if (z0 + CHUNK > CITY_LEN) addBuilding(b, { x0: -170, x1: 170, z0: CITY_LEN, z1: CITY_LEN + 40, h: 60, style: 3 });
   } else {
     for (const bl of START_BUILDINGS) addBuilding(b, bl);
   }
@@ -291,7 +370,7 @@ function buildChunk(c: Chunk, mats: Record<Key, THREE.Material>) {
     const mesh = new THREE.Mesh(g.build(), mats[k]);
     const facadeOrRoof = k.startsWith('facade') || k === 'roof';
     mesh.receiveShadow = true;
-    mesh.castShadow = !facadeOrRoof && k !== 'asphalt';
+    mesh.castShadow = !facadeOrRoof && k !== 'asphalt' && k !== 'water' && k !== 'waterTop' && k !== 'spray';
     if (k === 'leaves') mesh.customDepthMaterial = leafMaterials().depth;
     group.add(mesh);
   }
@@ -308,7 +387,7 @@ export class CityView {
     scene.add(this.root);
     // Land far beyond the street, under everything.
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, CITY_LEN + 4000).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x55585c, roughness: 1 }));
-    ground.position.set(0, -0.03, CITY_LEN / 2);
+    ground.position.set(0, -0.15, CITY_LEN / 2); // well below the roads, so far-off roads don't flicker either
     ground.receiveShadow = true;
     this.root.add(ground);
     this.load(-1);

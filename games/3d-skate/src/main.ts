@@ -8,7 +8,7 @@ import { gameStorage } from '../../../shared/storage';
 import { goToArcade } from '../../../shared/home';
 import { Controls } from '../../../shared/controls';
 import { Skater, STEP, type Input } from './sim/skater';
-import { HALF_W, MILE, surfaceAt } from './sim/world';
+import { MILE, outside, surfaceAt } from './sim/world';
 import { CityView } from './view/city';
 import { DEFAULT_LOOK, SkaterModel, type Look } from './view/skaterModel';
 import { BOARDS } from './view/textures';
@@ -234,7 +234,11 @@ function updateCamera(dt: number) {
     target.y + Math.sin(pitch) * camDist + 0.4,
     target.z - Math.cos(yaw) * Math.cos(pitch) * camDist,
   );
-  want3.x = Math.max(-HALF_W + 1, Math.min(HALF_W - 1, want3.x));
+  // Never inside a building: slide in toward the skater until the camera is over a street.
+  for (let k = 0; k < 10 && outside(want3.x, want3.z); k++) {
+    want3.x += (target.x - want3.x) * 0.3;
+    want3.z += (target.z - want3.z) * 0.3;
+  }
   if (camPos.lengthSq() === 0) camPos.copy(want3);
   camPos.lerp(want3, Math.min(1, dt * 8));
   camLook.lerp(target, Math.min(1, dt * 12));

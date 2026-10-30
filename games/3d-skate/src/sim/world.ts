@@ -12,9 +12,16 @@ export const STEP_UP = 0.35; // anything higher than this in front of the wheels
 export const CHUNK = 100;
 export const FIRST_PARK_CHUNK = 3; // the mega ramp has the street to itself before this
 export const SIDEWALK = 0.15;
+/** The two side streets run parallel to the main one, from |x| = SIDE_X0 to SIDE_X1. */
+export const SIDE_X0 = 80;
+export const SIDE_X1 = 104;
+export const SIDE_MID = (SIDE_X0 + SIDE_X1) / 2;
+/** Cross streets join all three every CROSS_EVERY metres, CROSS_W wide (from z = n * CROSS_EVERY). */
+export const CROSS_EVERY = 200;
+export const CROSS_W = 20;
 
 /** How a surface is painted. */
-export type Look = 'concrete' | 'blue' | 'wood' | 'red' | 'roof' | 'wall';
+export type Look = 'concrete' | 'blue' | 'wood' | 'red' | 'roof' | 'wall' | 'water';
 
 export interface Profile {
   s: number[];
@@ -52,7 +59,22 @@ export interface RampPiece {
   stairs?: boolean;
 }
 
-export type Piece = BoxPiece | RampPiece;
+/** A ring (or, with r0 = 0, a disc) with a flat top: a fountain's round bench or basin. */
+export interface RingPiece {
+  kind: 'ring';
+  x0: number;
+  x1: number;
+  z0: number;
+  z1: number;
+  cx: number;
+  cz: number;
+  r0: number;
+  r1: number;
+  top: number;
+  look: Look;
+}
+
+export type Piece = BoxPiece | RampPiece | RingPiece;
 
 export interface Rail {
   a: [number, number, number];
@@ -62,7 +84,7 @@ export interface Rail {
 }
 
 export interface Decor {
-  kind: 'lamp' | 'tree' | 'bench' | 'mile' | 'banner';
+  kind: 'lamp' | 'tree' | 'bench' | 'mile' | 'banner' | 'fountain' | 'planterTree';
   x: number;
   z: number;
   rot?: number;
@@ -165,6 +187,10 @@ export function profileAt(p: Profile, s: number): [number, number] {
 export function pieceAt(p: Piece, x: number, z: number): [number, number, number] | null {
   if (x < p.x0 || x > p.x1 || z < p.z0 || z > p.z1) return null;
   if (p.kind === 'box') return [p.top, 0, 0];
+  if (p.kind === 'ring') {
+    const d = Math.hypot(x - p.cx, z - p.cz);
+    return d >= p.r0 && d <= p.r1 ? [p.top, 0, 0] : null;
+  }
   const c = p.axis === 'x' ? x : z;
   const s = (c - p.s0) * p.dir;
   if (s < 0 || s > p.prof.len) return null;
@@ -176,24 +202,34 @@ export function pieceAt(p: Piece, x: number, z: number): [number, number, number
 // ---------------------------------------------------------------- the start: the tall building and the mega ramp
 
 export const RAMP_W = 12;
-/** The mega ramp's profile, starting at the roof edge (z = 0). */
+/**
+ * The mega ramp, in two parts down the street from the roof edge (z = 0):
+ * - the drop: a roll-in off the roof, a 50° drop, and a curve up to a 60° kicker whose lip is about
+ *   halfway down the building;
+ * - after a gap, the landing ramp: a flat deck at about the lip's height (for short jumps), a long slope
+ *   down to the street, and a curve to flat at the bottom.
+ */
 export const MEGA = (() => {
+  const deg = (d: number) => (d * Math.PI) / 180;
   const b = new ProfileBuilder(ROOF_Y);
-  const drop = (50 * Math.PI) / 180;
-  const R1 = 15, R2 = 40, R3 = 22;
+  const drop = deg(50), lip = deg(60);
+  const R1 = 15, R2 = 30;
   b.arc(R1, 0, -drop, 0.25);
-  const bottomCurveRise = R2 * (1 - Math.cos(drop));
-  b.slope(-drop, -(b.top - bottomCurveRise));
-  b.arc(R2, -drop, 0, 0.25);
-  b.flat(25);
-  const kickStart = b.end;
-  const lip = (70 * Math.PI) / 180;
-  b.arc(R3, 0, lip, 0.2);
-  const lipS = b.end;
-  b.flat(14);
-  b.slope(-(22 * Math.PI) / 180, -b.top);
+  const bottom = 55; // the lowest point of the curve into the kicker
+  const curveTop = bottom + R2 * (1 - Math.cos(drop));
+  b.slope(-drop, -(b.top - curveTop));
+  b.arc(R2, -drop, lip, 0.2);
   const prof = b.build();
-  return { prof, kickStart, lipS, lipH: prof.h[prof.s.indexOf(lipS)] };
+  const lipS = prof.len, lipH = prof.h[prof.h.length - 1];
+  // The landing: starts after a gap, a little lower than the lip.
+  const gap = 12, deck = 25, landSlope = deg(28), R3 = 30;
+  const landH = lipH - 6;
+  const rollRise = R3 * (1 - Math.cos(landSlope));
+  const l = new ProfileBuilder(landH).flat(deck).slope(-landSlope, -(landH - rollRise)).arc(R3, -landSlope, 0, 0.25);
+  // Bring it to the ground exactly.
+  const land = l.build();
+  land.h[land.h.length - 1] = 0;
+  return { prof, lipS, lipH, land, landS: lipS + gap, landH, deck, end: lipS + gap + land.len };
 })();
 
 /** Where you start: on the roof, a little back from the ramp, facing down the street. */
@@ -212,20 +248,21 @@ function startPieces(): Chunk {
   pieces.push({ kind: 'box', x0: -15, x1: 15, z0: -40, z1: -39.6, top: ROOF_Y + par, look: 'wall' });
   pieces.push({ kind: 'box', x0: -15, x1: -hw - 0.3, z0: -0.4, z1: 0, top: ROOF_Y + par, look: 'wall' });
   pieces.push({ kind: 'box', x0: hw + 0.3, x1: 15, z0: -0.4, z1: 0, top: ROOF_Y + par, look: 'wall' });
-  // The mega ramp, with guard walls along both sides so you can't ride off the edge.
-  const L = MEGA.prof.len;
-  pieces.push({ kind: 'ramp', x0: -hw, x1: hw, z0: 0, z1: L, axis: 'z', s0: 0, dir: 1, prof: MEGA.prof, look: 'blue', coping: false });
-  const guardEnd = MEGA.kickStart; // the kicker and landing are open at the sides
-  const guard = new ProfileBuilder(MEGA.prof.h[0] + 1);
-  for (let i = 1; i < MEGA.prof.s.length && MEGA.prof.s[i] <= guardEnd; i++) {
-    guard.line(MEGA.prof.s[i] - guard.end, MEGA.prof.h[i] + 1 - guard.top);
-  }
-  const gp = guard.build();
-  pieces.push({ kind: 'ramp', x0: -hw - 0.3, x1: -hw, z0: 0, z1: gp.len, axis: 'z', s0: 0, dir: 1, prof: gp, look: 'wall' });
-  pieces.push({ kind: 'ramp', x0: hw, x1: hw + 0.3, z0: 0, z1: gp.len, axis: 'z', s0: 0, dir: 1, prof: gp, look: 'wall' });
-  // A rail down the landing, for anyone brave enough.
-  const landTop = MEGA.lipS + 14;
-  rails.push({ a: [hw - 1, MEGA.lipH + 0.4, MEGA.lipS + 2], b: [hw - 1, MEGA.lipH + 0.4, landTop] });
+  // The mega ramp: the drop with its kicker, then the landing ramp. Guard walls along both sides of each
+  // so you can't ride off the edge (they stop at the lip, where you fly).
+  const guarded = (prof: Profile, s0: number) => {
+    pieces.push({ kind: 'ramp', x0: -hw, x1: hw, z0: s0, z1: s0 + prof.len, axis: 'z', s0, dir: 1, prof, look: 'blue' });
+    const guard = new ProfileBuilder(prof.h[0] + 1);
+    for (let i = 1; i < prof.s.length; i++) guard.line(prof.s[i] - guard.end, prof.h[i] + 1 - guard.top);
+    const gp = guard.build();
+    for (const [x0, x1] of [[-hw - 0.3, -hw], [hw, hw + 0.3]]) {
+      pieces.push({ kind: 'ramp', x0, x1, z0: s0, z1: s0 + gp.len, axis: 'z', s0, dir: 1, prof: gp, look: 'wall' });
+    }
+  };
+  guarded(MEGA.prof, 0);
+  guarded(MEGA.land, MEGA.landS);
+  // A rail along the landing deck, for anyone brave enough.
+  rails.push({ a: [hw - 1.2, MEGA.landH + 0.4, MEGA.landS + 2], b: [hw - 1.2, MEGA.landH + 0.4, MEGA.landS + MEGA.deck - 1] });
   return { i: -1, pieces, rails, decor: [{ kind: 'banner', x: 0, z: 2, text: 'SKATE CITY' }], buildings: [] };
 }
 
@@ -324,6 +361,80 @@ const FEATURES: ((o: Out, cx: number, z: number, r: () => number, side: number) 
   },
 ];
 
+/** A box along z with both long top edges grindable. */
+function ledgeZ(o: Out, cx: number, w: number, z0: number, len: number, top: number, look: Look = 'concrete') {
+  o.pieces.push({ kind: 'box', x0: cx - w / 2, x1: cx + w / 2, z0, z1: z0 + len, top, look });
+  o.rails.push({ a: [cx - w / 2, top, z0], b: [cx - w / 2, top, z0 + len], edge: true });
+  o.rails.push({ a: [cx + w / 2, top, z0], b: [cx + w / 2, top, z0 + len], edge: true });
+}
+
+/** A circle of short grindable rail pieces (the edge of something round). */
+function ringRail(o: Out, cx: number, cz: number, r: number, y: number, n = 24) {
+  for (let i = 0; i < n; i++) {
+    const a0 = (i / n) * Math.PI * 2, a1 = ((i + 1) / n) * Math.PI * 2;
+    o.rails.push({ a: [cx + Math.cos(a0) * r, y, cz + Math.sin(a0) * r], b: [cx + Math.cos(a1) * r, y, cz + Math.sin(a1) * r], edge: true });
+  }
+}
+
+/**
+ * City spots for the side streets (narrower than the main street: about 18 m of road). Each fits in a
+ * 33 m slot; cx is the middle of the side street.
+ */
+const SIDE_FEATURES: ((o: Out, cx: number, z: number, r: () => number, decor: Decor[]) => void)[] = [
+  // A fountain: a round basin with a grindable rim, inside a round bench you can grind all the way round.
+  (o, cx, z, _r, decor) => {
+    const cz = z + 16;
+    const ring = (r0: number, r1: number, top: number, look: Look) =>
+      o.pieces.push({ kind: 'ring', x0: cx - r1, x1: cx + r1, z0: cz - r1, z1: cz + r1, cx, cz, r0, r1, top, look });
+    ring(0, 3.9, 0.62, 'water'); // the basin: solid, drawn as a stone rim with water inside
+    ring(5.4, 6.1, 0.46, 'wood'); // the bench
+    ringRail(o, cx, cz, 3.9, 0.62);
+    ringRail(o, cx, cz, 6.1, 0.46, 28);
+    decor.push({ kind: 'fountain', x: cx, z: cz });
+  },
+  // Stairs up to a plaza and stairs down the other side, handrails on both, and a ledge (a "hubba")
+  // running down beside the stairs going down.
+  (o, cx, z) => {
+    const n = 5, rise = 0.27, run = 0.45, H = n * rise, top = 7;
+    const p = new ProfileBuilder().flat(0.5).steps(n, rise, run).flat(top).steps(n, -rise, run).flat(0.5).build();
+    rampZ(o, cx, 9, z + 6, 1, p, 'concrete', { stairs: true });
+    const up0 = z + 6.5, up1 = up0 + n * run, dn0 = up1 + top, dn1 = dn0 + n * run;
+    for (const x of [cx - 3.6, cx + 3.6]) {
+      o.rails.push({ a: [x, 0.85, up0 - 0.4], b: [x, H + 0.85, up1 + 0.3] });
+      o.rails.push({ a: [x, H + 0.85, dn0 - 0.3], b: [x, 0.85, dn1 + 0.4] });
+    }
+    // The hubba: a ledge on the plaza's edge that slopes down beside the down stairs.
+    const hx = cx + 4.5;
+    const hub = new ProfileBuilder(H + 0.45).flat(top).line(n * run, -H).flat(0.5).build();
+    rampZ(o, hx, 0.8, up1, 1, hub, 'concrete');
+    o.rails.push({ a: [hx - 0.4, H + 0.45, up1], b: [hx - 0.4, H + 0.45, dn0], edge: true });
+    o.rails.push({ a: [hx - 0.4, H + 0.45, dn0], b: [hx - 0.4, 0.45, dn1], edge: true });
+  },
+  // A row of planters (each with a tree) with grindable edges.
+  (o, cx, z, r, decor) => {
+    const x = cx + (r() < 0.5 ? -3 : 3);
+    for (let k = 0; k < 3; k++) {
+      const z0 = z + 3 + k * 9;
+      ledgeZ(o, x, 2.6, z0, 5, 0.55);
+      decor.push({ kind: 'planterTree', x, z: z0 + 2.5 });
+    }
+  },
+  // Park benches in a row, as ledges, and a kinked rail beside them.
+  (o, cx, z) => {
+    for (let k = 0; k < 3; k++) ledgeZ(o, cx - 3.5, 0.6, z + 4 + k * 8, 3, 0.46, 'wood');
+    o.rails.push({ a: [cx + 3, 0.5, z + 4], b: [cx + 3, 0.5, z + 12] });
+    o.rails.push({ a: [cx + 3, 0.5, z + 12], b: [cx + 3, 0.9, z + 18] });
+    o.rails.push({ a: [cx + 3, 0.9, z + 18], b: [cx + 3, 0.9, z + 26] });
+  },
+  // A little bank-to-ledge: a concrete bank up to a wide ledge you can grind or jump off.
+  (o, cx, z) => {
+    const p = new ProfileBuilder().slope(deg(20), 0.7).flat(5).build();
+    const bank = rampZ(o, cx, 6, z + 8, 1, p, 'concrete');
+    o.rails.push({ a: [cx - 3, 0.7, bank.z1 - 5], b: [cx - 3, 0.7, bank.z1], edge: true });
+    o.rails.push({ a: [cx + 3, 0.7, bank.z1 - 5], b: [cx + 3, 0.7, bank.z1], edge: true });
+  },
+];
+
 /** The middle of the street gets a big table-top jump every 400 m. */
 function bigJump(o: Out, z: number) {
   const k = new ProfileBuilder().arc(14, 0, deg(38)).build();
@@ -334,16 +445,37 @@ function bigJump(o: Out, z: number) {
 
 const STYLES = 5;
 
-function buildingsAlong(r: () => number, z0: number, z1: number, side: number, out: Building[]) {
+/** Is z inside a cross street? */
+export const crossAt = (z: number) => z >= 0 && z % CROSS_EVERY < CROSS_W;
+
+/** Buildings along one side of a street from x = xa outward (`dir`), between z0 and z1. */
+function buildingsAlong(r: () => number, z0: number, z1: number, xa: number, dir: number, depth: number | null, out: Building[]) {
   let z = z0;
   while (z < z1 - 1) {
     const w = Math.min(z1 - z, 14 + r() * 30);
     const tall = r();
     const h = 14 + tall * tall * 110;
-    const depth = 22 + r() * 20;
-    const xa = side * HALF_W, xb = side * (HALF_W + depth);
+    const d = depth ?? 22 + r() * 20;
+    const xb = xa + dir * d;
     out.push({ x0: Math.min(xa, xb), x1: Math.max(xa, xb), z0: z, z1: z + w, h, style: Math.floor(r() * STYLES) });
     z += w;
+  }
+}
+
+/** Every building in 100 m of street: the blocks between the streets, and the row outside the side streets. */
+function chunkBuildings(r: () => number, z0: number, z1: number, out: Building[]) {
+  // Leave the cross streets open.
+  const spans: [number, number][] = [];
+  let z = z0;
+  while (z < z1) {
+    const next = Math.min(z1, Math.floor(z / CROSS_EVERY) * CROSS_EVERY + CROSS_EVERY);
+    const from = crossAt(z) ? Math.floor(z / CROSS_EVERY) * CROSS_EVERY + CROSS_W : z;
+    if (from < next) spans.push([from, next]);
+    z = next;
+  }
+  for (const side of [-1, 1]) {
+    for (const [a, b] of spans) buildingsAlong(r, a, b, side * HALF_W, side, SIDE_X0 - HALF_W, out);
+    buildingsAlong(r, z0, z1, side * SIDE_X1, side, null, out);
   }
 }
 
@@ -363,6 +495,31 @@ export function chunk(i: number): Chunk {
   // Sidewalks.
   o.pieces.push({ kind: 'box', x0: -HALF_W, x1: -HALF_W + 4, z0, z1: z0 + CHUNK, top: SIDEWALK, look: 'concrete' });
   o.pieces.push({ kind: 'box', x0: HALF_W - 4, x1: HALF_W, z0, z1: z0 + CHUNK, top: SIDEWALK, look: 'concrete' });
+  // The side streets' sidewalks, lamps and trees.
+  for (const side of [-1, 1]) {
+    for (const [xa, xb] of [[SIDE_X0, SIDE_X0 + 3], [SIDE_X1 - 3, SIDE_X1]]) {
+      o.pieces.push({ kind: 'box', x0: Math.min(side * xa, side * xb), x1: Math.max(side * xa, side * xb), z0, z1: z0 + CHUNK, top: SIDEWALK, look: 'concrete' });
+    }
+    for (let z = z0 + 12; z < z0 + CHUNK; z += 25) decor.push({ kind: 'lamp', x: side * (SIDE_X1 - 3.6), z, rot: side > 0 ? -Math.PI / 2 : Math.PI / 2 });
+    for (let z = z0 + 4; z < z0 + CHUNK; z += 16) if (!crossAt(z)) decor.push({ kind: 'tree', x: side * (SIDE_X0 + 1.5), z });
+  }
+  if (i >= 0 && z0 + CHUNK < CITY_LEN - 60) {
+    for (const side of [-1, 1]) {
+      for (const slot of [0, 1, 2]) {
+        const zs = z0 + slot * 33 + 1;
+        if (crossAt(zs) || crossAt(zs + 32) || r() < 0.12) continue; // keep the crossings clear
+        SIDE_FEATURES[Math.floor(r() * SIDE_FEATURES.length)](o, side * SIDE_MID, zs, r, decor);
+      }
+      // Something to skate in the cross street, between the main street and the side street.
+      if (crossAt(z0) && i > 0) {
+        const x = side * ((HALF_W + SIDE_X0) / 2), cz = z0 + CROSS_W / 2;
+        if (r() < 0.5) {
+          o.pieces.push({ kind: 'box', x0: x - 6, x1: x + 6, z0: cz - 0.6, z1: cz + 0.6, top: 0.45, look: 'concrete' });
+          o.rails.push({ a: [x - 6, 0.45, cz - 0.6], b: [x + 6, 0.45, cz - 0.6], edge: true }, { a: [x - 6, 0.45, cz + 0.6], b: [x + 6, 0.45, cz + 0.6], edge: true });
+        } else o.rails.push({ a: [x - 7, 0.45, cz], b: [x + 7, 0.45, cz] });
+      }
+    }
+  }
   if (i >= FIRST_PARK_CHUNK && z0 + CHUNK < CITY_LEN - 60) {
     for (const side of [-1, 1]) {
       for (const slot of [0, 1, 2]) {
@@ -386,15 +543,14 @@ export function chunk(i: number): Chunk {
   if (mile >= 1 && mile * MILE >= z0 && mile * MILE < z0 + CHUNK) {
     decor.push({ kind: 'mile', x: 0, z: mile * MILE, text: mile === 10 ? '10 MILES!' : `MILE ${mile}` });
   }
-  buildingsAlong(r, z0, z0 + CHUNK, -1, buildings);
-  buildingsAlong(r, z0, z0 + CHUNK, 1, buildings);
+  chunkBuildings(r, z0, z0 + CHUNK, buildings);
   c = { i, pieces: o.pieces, rails: o.rails, decor, buildings };
   cache.set(i, c);
   return c;
 }
 
 export const chunkIndex = (z: number) => (z < 0 ? -1 : Math.floor(z / CHUNK));
-const START_REACH = MEGA.prof.len + 2; // the start area's pieces reach this far down the street
+const START_REACH = MEGA.end + 2; // the start area's pieces reach this far down the street
 
 /** Every chunk whose pieces might cover street position z. */
 function chunksAt(z: number): Chunk[] {
@@ -412,11 +568,14 @@ export interface Surface {
   wall: boolean;
 }
 
-/** Outside the playable area (the building fronts, the ends of the city). */
+/** Outside the streets (inside a building, or past the ends of the city). */
 export function outside(x: number, z: number) {
   if (z > CITY_LEN || z < -40) return true;
-  if (Math.abs(x) > HALF_W) return true;
-  return false;
+  const ax = Math.abs(x);
+  if (z < 0) return ax > HALF_W; // the start: the roof and its neighbours
+  if (ax <= HALF_W) return false; // the main street
+  if (ax >= SIDE_X0 && ax <= SIDE_X1) return false; // a side street
+  return !(ax <= SIDE_X1 && crossAt(z)); // a cross street
 }
 
 /** The ground at (x, z) for something whose bottom is at height `feet`. */

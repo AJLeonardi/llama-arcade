@@ -282,12 +282,17 @@ export class SkaterModel {
       this.person.add(hand);
       this.hands.push(hand);
     }
-    // Torso: chest wider than the waist, shoulders sloping to the neck; jeans and a belt at the hips.
-    this.torso = limb([[0, 0.06], [0.1, 0.14], [0.25, 0.165], [0.55, 0.15], [0.85, 0.14], [1, 0.15]], 0.56, this.mats.shirt, (g) => {
-      (g.children[0] as THREE.Mesh).scale.set(1.28, 1, 0.75);
-      const pelvis = mesh(new THREE.SphereGeometry(0.16, 18, 12), this.mats.pants, g);
-      pelvis.scale.set(1.18, 0.7, 0.82);
-      pelvis.position.y = -0.52;
+    // Torso: chest wider than the waist, shoulders sloping to the neck. The shirt stops at the belt (its
+    // rounded end tucked inside the jeans), and the jeans' seat covers the hips, so no shirt pokes out
+    // between the legs. The limb is 0.56 long (neck to hip joints); the shirt is drawn 0.47 of that.
+    this.torso = limb([[0, 0.06], [1, 0.15]], 0.56, this.mats.shirt, (g) => {
+      const shirt = g.children[0] as THREE.Mesh;
+      shirt.geometry.dispose();
+      shirt.geometry = shaped([[0, 0.06], [0.12, 0.14], [0.3, 0.165], [0.65, 0.15], [1, 0.142]], 0.47);
+      shirt.scale.set(1.28, 1, 0.75);
+      const pelvis = mesh(new THREE.SphereGeometry(0.17, 20, 14), this.mats.pants, g);
+      pelvis.scale.set(1.16, 0.78, 0.86);
+      pelvis.position.y = -0.53;
       const belt = mesh(new THREE.CylinderGeometry(0.163, 0.163, 0.035, 18), M('#2a211b', 0.5), g);
       belt.scale.set(1.17, 1, 0.83);
       belt.position.y = -0.47;

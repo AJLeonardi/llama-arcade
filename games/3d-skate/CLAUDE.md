@@ -11,10 +11,16 @@ A realistic-looking 3D skateboarding game (three.js, TypeScript, no physics engi
     building is at z < 0 (roof at `ROOF_Y`, spawn `SPAWN`); the street runs to `CITY_LEN` (10 miles),
     `HALF_W` either side of the middle. Everything solid is a `Piece`: a `box` or a `ramp` (a `Profile`,
     the height along one axis built with `ProfileBuilder` lines/arcs/steps, solid down to the ground).
-    `MEGA` is the mega ramp (roll-in, 50° drop, kicker to 70°, table, landing slope) with guard walls on
-    the drop. `chunk(i)` makes 100 m of street from a seeded `rng(i)`: sidewalks, 3 slots per side
-    filled from `FEATURES`, a `bigJump` table-top in the middle every 400 m, lamps/trees/benches, mile signs,
-    buildings. Chunk -1 is the start area. `surfaceAt(x, z, feet)` = the highest surface at most `STEP_UP`
+    `MEGA` is the mega ramp in two parts: the drop (roll-in, 50° drop, curve up to a 60° kicker whose lip
+    is ~70 m up, halfway down the building) and, after a 12 m gap, the landing ramp (flat deck a bit
+    lower than the lip, 28° slope, curve to flat); guard walls along both. The streets: the main street
+    (`HALF_W` either side of x = 0), a side street each side (`SIDE_X0`..`SIDE_X1`), and cross streets
+    every `CROSS_EVERY` m (`crossAt(z)`) joining all three; everything else is building (`outside`). `chunk(i)` makes 100 m of street from a seeded `rng(i)`: sidewalks, 3 slots per side
+    filled from `FEATURES`, a `bigJump` table-top in the middle every 400 m; the side streets get
+    `SIDE_FEATURES` (fountain with a grindable round bench and basin rim, stairs up and down with
+    handrails and a hubba ledge, planters, benches with a kinked rail, bank-to-ledge), the cross streets a
+    ledge or rail; lamps/trees/benches, mile signs, buildings filling the blocks (`chunkBuildings`).
+    Pieces are `box`, `ramp` or `ring` (round, flat-topped: fountain bench and basin). Chunk -1 is the start area. `surfaceAt(x, z, feet)` = the highest surface at most `STEP_UP`
     above `feet`, and `wall` if something is taller; `railsAt(z)`.
   - `skater.ts`: `Skater`, stepped at 120 Hz. Modes `ground` (rolls along `heading` at `speed`, gravity
     along the slope, auto-turns round when rolling backwards), `air` (leaves the ground when it drops away
@@ -59,7 +65,9 @@ From `shared/`: `Controls` (joystick + look-drag + the OLLIE button as its jump 
 - The chase camera is pushed above whatever is under it and above the line to the skater
   (`main.ts:keepInSight`), so it never ends up under the mega ramp.
 - Jumps in the street are table-tops (no gap): slow riders land on the flat top instead of a wall.
-- Draw calls are ~190 at street level (~63k triangles) (half of them the skater's parts, drawn twice for shadows).
+- `Geo.quad` works out a quad's facing from all four corners (Newell), so ramp sides that taper to a
+  point on the ground face outward (they used to be invisible from outside).
+- Draw calls are ~210 at street level (~120k triangles) (half of them the skater's parts, drawn twice for shadows).
 
 ## Ideas for later
 

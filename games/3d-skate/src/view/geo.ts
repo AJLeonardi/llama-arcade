@@ -24,8 +24,15 @@ export class Geo {
    */
   quad(p: [V3, V3, V3, V3], n: V3 | [V3, V3, V3, V3], uv: [number, number][]) {
     const ns: V3[] = n.length === 3 && typeof n[0] === 'number' ? [n as V3, n as V3, n as V3, n as V3] : (n as V3[]);
-    const e1 = sub(p[1], p[0]), e2 = sub(p[2], p[0]);
-    const f = cross(e1, e2);
+    // The quad's facing from all four corners (Newell's method), so a quad with two corners in the same
+    // place (a triangle, like a ramp's side where it meets the ground) still faces the right way.
+    const f: V3 = [0, 0, 0];
+    for (let i = 0; i < 4; i++) {
+      const a = p[i], b = p[(i + 1) % 4];
+      f[0] += (a[1] - b[1]) * (a[2] + b[2]);
+      f[1] += (a[2] - b[2]) * (a[0] + b[0]);
+      f[2] += (a[0] - b[0]) * (a[1] + b[1]);
+    }
     const avg = add(add(ns[0], ns[1]), add(ns[2], ns[3]));
     const order = dot(f, avg) >= 0 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2];
     for (const i of order) this.vert(p[i], ns[i], uv[i][0], uv[i][1]);
