@@ -130,3 +130,92 @@ export function switchbackStairs(t: TowerSpot, flights: number): Piece[] {
   out.push({ kind: 'rail', x0: xa + 0.05, z0: zA, x1: xa + 0.05, z1: zB, y: t.top });
   return out;
 }
+
+// ---------------------------------------------------------------- steering round the corners
+
+/** A route up a set of stairs: the centre line through the flights and landings, bottom to top. */
+interface Route { pts: [number, number, number][]; cum: number[] }
+const routes: Route[] = [];
+
+/** Remember a set of stairs so `stairGuide` can steer people up and down it. */
+export function registerStairs(pieces: Piece[]) {
+  const ends = (f: Flight) => {
+    const cx = (f.x0 + f.x1) / 2, cz = (f.z0 + f.z1) / 2;
+    const lo: [number, number] = f.dir === 'x+' ? [f.x0, cz] : f.dir === 'x-' ? [f.x1, cz] : f.dir === 'z+' ? [cx, f.z0] : [cx, f.z1];
+    const hi: [number, number] = f.dir === 'x+' ? [f.x1, cz] : f.dir === 'x-' ? [f.x0, cz] : f.dir === 'z+' ? [cx, f.z1] : [cx, f.z0];
+    const d: [number, number] = f.dir === 'x+' ? [1, 0] : f.dir === 'x-' ? [-1, 0] : f.dir === 'z+' ? [0, 1] : [0, -1];
+    return { lo, hi, d };
+  };
+  const pts: [number, number, number][] = [];
+  let prev: Flight | null = null, landing: Landing | null = null;
+  for (const p of pieces) {
+    if (p.kind === 'landing') landing = prev ? p : null;
+    if (p.kind !== 'flight') continue;
+    const e = ends(p);
+    if (prev && landing) {
+      // Across the landing between two flights: carry on into its middle along the lane you came up, then
+      // go to the lane of the next flight (a corner, or a U-turn that keeps clear of the rail between).
+      const a = ends(prev), y = landing.y;
+      const depth = (s: [number, number]) => (s[0] ? landing!.x1 - landing!.x0 : landing!.z1 - landing!.z0) / 2;
+      pts.push([a.hi[0] + a.d[0] * depth(a.d), y, a.hi[1] + a.d[1] * depth(a.d)]);
+      pts.push([e.lo[0] - e.d[0] * depth(e.d), y, e.lo[1] - e.d[1] * depth(e.d)]);
+    }
+    pts.push([e.lo[0], p.y0, e.lo[1]], [e.hi[0], p.y0 + p.rise, e.hi[1]]);
+    prev = p;
+    landing = null;
+  }
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][2] - pts[i - 1][2]));
+  routes.push({ pts, cum });
+}
+
+/** How far ahead along the stairs to aim (m): far enough to go round a corner smoothly. */
+const LOOK = 0.9;
+
+/**
+ * On the stairs and heading roughly up or down them (unit direction `dx`, `dz`)? Then the way to go: towards
+ * a point a little further along the stairs' centre line, which takes you round the corners and keeps you in
+ * the middle. `prefer` is the way you were going (1 up, -1 down): round a corner the camera still points at the
+ * railing, so a push that's neither up nor down keeps going that way; `force` keeps going that way whatever
+ * (the stick is pushed forward: "keep going", even after a U-turn the camera hasn't caught up with). Null when you're not on the stairs,
+ * walking off the top or bottom end, or (not already going) straight across.
+ */
+export function stairGuide(x: number, y: number, z: number, dx: number, dz: number, prefer: 1 | -1 | 0 = 0, force = false): { dir: [number, number]; way: 1 | -1 } | null {
+  let best: { r: Route; s: number; d: number; tx: number; tz: number } | null = null;
+  for (const r of routes) {
+    for (let i = 1; i < r.pts.length; i++) {
+      const a = r.pts[i - 1], b = r.pts[i];
+      const ex = b[0] - a[0], ez = b[2] - a[2], len = Math.hypot(ex, ez);
+      if (len < 1e-6) continue;
+      const t = Math.max(0, Math.min(1, ((x - a[0]) * ex + (z - a[2]) * ez) / (len * len)));
+      const d = Math.hypot(a[0] + ex * t - x, a[2] + ez * t - z);
+      if (d > 0.75 || Math.abs(a[1] + (b[1] - a[1]) * t - y) > 0.6) continue;
+      if (!best || d < best.d) best = { r, s: r.cum[i - 1] + len * t, d, tx: ex / len, tz: ez / len };
+    }
+  }
+  if (!best) return null;
+  const { r } = best;
+  const end = r.cum[r.cum.length - 1];
+  /** The unit direction from here to the point `s` along the route (or null right on top of it). */
+  const toward = (s: number): [number, number] | null => {
+    let i = 1;
+    while (i < r.cum.length - 1 && r.cum[i] < s) i++;
+    const a = r.pts[i - 1], b = r.pts[i], f = (s - r.cum[i - 1]) / Math.max(1e-6, r.cum[i] - r.cum[i - 1]);
+    const gx = a[0] + (b[0] - a[0]) * f - x, gz = a[2] + (b[2] - a[2]) * f - z, gl = Math.hypot(gx, gz);
+    return gl < 1e-6 ? null : [gx / gl, gz / gl];
+  };
+  // Up or down, whichever is nearer the way the stick points (round a corner the camera hasn't caught up yet).
+  const up = best.s + LOOK <= end ? toward(best.s + LOOK) : null;
+  const down = best.s - LOOK >= 0 ? toward(best.s - LOOK) : null;
+  const du = up ? up[0] * dx + up[1] * dz : -2, dd = down ? down[0] * dx + down[1] * dz : -2;
+  // Near the top or bottom end, heading off it: straight on, off the stairs (then it's free walking).
+  const along = best.tx * dx + best.tz * dz;
+  const keep = force && prefer ? prefer : 0;
+  if (best.s + LOOK > end && (keep > 0 || (!keep && along > 0.35))) return { dir: [best.tx, best.tz], way: 1 };
+  if (best.s - LOOK < 0 && (keep < 0 || (!keep && along < -0.35))) return { dir: [-best.tx, -best.tz], way: -1 };
+  let way: 1 | -1 = du >= dd ? 1 : -1;
+  if (prefer && (force || Math.max(du, dd) < 0.4)) way = prefer;
+  else if (Math.max(du, dd) < 0.1) return null;
+  const dir = way > 0 ? up : down;
+  return dir ? { dir, way } : null;
+}

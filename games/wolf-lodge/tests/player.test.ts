@@ -8,14 +8,7 @@ const run = (p: Player, inp: Partial<Input>, secs: number) => {
   for (let i = 0; i < secs / STEP; i++) p.step({ x: 0, y: 0, camYaw: p.yaw, jump: false, ...inp });
 };
 
-/** Walk to each point in turn (steering like a kid with the joystick). */
-const walkTo = (p: Player, pts: [number, number][]) => {
-  for (const [x, z] of pts) {
-    for (let i = 0; i < 8 / STEP && Math.hypot(x - p.x, z - p.z) > 0.25; i++) {
-      p.step({ x: 0, y: Math.min(1, Math.hypot(x - p.x, z - p.z) + 0.3), camYaw: Math.atan2(x - p.x, z - p.z), jump: false });
-    }
-  }
-};
+const centreXZ = (r: { x0: number; x1: number; z0: number; z1: number }): [number, 0, number] => [(r.x0 + r.x1) / 2, 0, (r.z0 + r.z1) / 2];
 const centre = (r: { x0: number; x1: number; z0: number; z1: number }): [number, number] => [(r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2];
 
 describe('walking', () => {
@@ -88,15 +81,46 @@ describe('walking', () => {
     expect(p.y).toBeGreaterThan(1.4);
   });
 
-  test('you can walk up both slide towers to the deck', () => {
+  test('holding the stick forward takes you up the stairs and round every corner (and back down)', () => {
+    /** Hold the stick still while the camera swings round behind you, like the game's camera does. */
+    const hold = (p: Player, stick: { x: number; y: number }, secs: number, until: () => boolean) => {
+      let cam = p.yaw;
+      for (let i = 0; i < secs / STEP && !until(); i++) {
+        p.step({ ...stick, camYaw: cam, jump: false });
+        const d = Math.atan2(Math.sin(p.yaw - cam), Math.cos(p.yaw - cam));
+        cam += d * Math.min(1, STEP * 1.2 * Math.min(1, p.speed / 2));
+      }
+    };
     for (const [i, t] of [TOWER, DROP_TOWER].entries()) {
-      const pieces = TOWER_STAIRS[i].filter((q) => q.kind !== 'rail');
+      const pieces = TOWER_STAIRS[i];
+      const first = pieces.find((q) => q.kind === 'flight')!;
+      const ground = pieces[0] as { x0: number; x1: number; z0: number; z1: number };
+      const yaw = { 'x+': Math.PI / 2, 'x-': -Math.PI / 2, 'z+': 0, 'z-': Math.PI }[(first as { dir: 'x+' | 'x-' | 'z+' | 'z-' }).dir];
+      // Up: a little push (walking) and a big one (running), held the whole way.
+      for (const push of [0.6, 1]) {
+        const p = new Player();
+        p.place(...centreXZ(ground), yaw);
+        hold(p, { x: 0, y: push }, 60, () => p.y > t.top - 0.05);
+        expect(p.y, `${t.name}, push ${push}`).toBeCloseTo(t.top, 1);
+        // Keep holding: off the top of the stairs onto the deck (not back down).
+        hold(p, { x: 0, y: push }, 1.5, () => false);
+        expect(p.y, `${t.name}, onto the deck`).toBeCloseTo(t.top, 1);
+      }
+      // Down: halfway up, pull the stick back to turn round, then push forward all the way down.
       const p = new Player();
-      const [sx, sz] = centre(pieces[0] as never);
-      p.place(sx, 0, sz, 0);
-      walkTo(p, pieces.slice(1, -1).map((q) => centre(q as never)));
-      walkTo(p, [[t.x, t.z]]);
-      expect(p.y, t.name).toBeCloseTo(t.top, 1);
+      p.place(...centreXZ(ground), yaw);
+      hold(p, { x: 0, y: 1 }, 60, () => p.y > t.top / 2);
+      hold(p, { x: 0, y: -1 }, 0.5, () => false);
+      hold(p, { x: 0, y: 1 }, 60, () => p.y < 0.05);
+      expect(p.y, `${t.name}, going down`).toBeLessThan(0.05);
+      // And from the deck: walk onto the stairs at the top, then hold forward all the way down.
+      const last = pieces.filter((q) => q.kind === 'flight').pop()!;
+      const q = new Player();
+      const [lx, lz] = centre(last);
+      const down = { 'x+': -Math.PI / 2, 'x-': Math.PI / 2, 'z+': Math.PI, 'z-': 0 }[last.dir];
+      q.place(lx + Math.sin(down) * -1.8, t.top, lz + Math.cos(down) * -1.8, down);
+      hold(q, { x: 0, y: 1 }, 60, () => q.y < 0.05);
+      expect(q.y, `${t.name}, down from the deck`).toBeLessThan(0.05);
     }
   });
 

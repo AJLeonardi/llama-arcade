@@ -30,8 +30,12 @@ Run commands from the repo root; this game's tests: `npx vitest run games/wolf-l
   - `stairs.ts`: the towers' walk-up stairs as pieces (flights, landings, deck, lone rails), each with its
     railing sides: `spiralStairs` (Big Tower, round the inside, last flight up the east side through a deck
     hole) and `switchbackStairs` (Wolf Drop, on its north face, clear of the drop). `stairBoxes` makes the
-    solid boxes (railings `RAIL_H` 1.2 m, higher than a jump); the view draws the same pieces. A landing
-    edge with no flight leaving it needs a rail (that was a fall-through once).
+    solid boxes (railings `RAIL_H` 1.2 m, higher than a jump); the view draws the same pieces (railings are
+    safety-mesh panels with posts, not balusters: those cost ~40k triangles). A landing edge with no flight
+    leaving it needs a rail (that was a fall-through once). `stairGuide` steers you round the corners: on
+    the stairs, the stick aims at a point 0.9 m further along the centre line (`registerStairs` builds the
+    line, through the middle of each lane on a landing). The player remembers up/down (`stairWay`): stick
+    forward keeps going that way (the camera lags at corners and U-turns), first pulling back turns round.
 - `src/view/`: three.js. Static things go through `build.ts`'s `Batch` (merged per material, metre UVs
   from `worldUV`).
   - `lodge.ts`: `materials()`, floors (dry 0.25 m strips, holes for pools), the sim boxes, roofs, glass

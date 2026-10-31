@@ -19,7 +19,8 @@ Lodge. You arrive in the car park, walk in, and book a room at the front desk.
   - The kids' fort with the giant tipping bucket (its water comes out in blocks that smash when they land),
     lifeguards, lounge chairs.
   - Walk up the slide towers' stairs (railings all the way), or press the button at the bottom for a quick
-    climb.
+    climb. On the stairs, just hold the stick forward: you follow the stairs round the corners. Pull it
+    back to turn round.
 - **The adventure wing:**
   - 🪄 **Wand Quest:** get a magic wand at the shop, find the 8 glowing runes hidden around the lodge, then
     wake the dragon.

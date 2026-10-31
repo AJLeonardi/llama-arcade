@@ -24,6 +24,20 @@ function fibreglass(color: string, seeThrough: boolean) {
 }
 export const steel = new THREE.MeshStandardMaterial({ color: '#c9ced4', roughness: 0.35, metalness: 0.85 });
 const darkSteel = new THREE.MeshStandardMaterial({ color: '#5a6066', roughness: 0.5, metalness: 0.7 });
+/** Steel safety mesh for the stair railings: a wire grid (cut out, so it's one cheap panel per railing). */
+const safetyMesh = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const g = c.getContext('2d')!;
+  g.strokeStyle = '#d6dade';
+  g.lineWidth = 4;
+  g.strokeRect(0, 0, 32, 32);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(1 / 0.07, 1 / 0.07); // 7 cm squares (the UVs are in metres)
+  tex.anisotropy = 4;
+  return new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.4, metalness: 0.6 });
+})();
 
 /** Sheet of water running down the slides: its texture scrolls (see `animate`). */
 const flowMat = new THREE.MeshStandardMaterial({ map: slideWater(), transparent: true, opacity: 0.75, roughness: 0.05, depthWrite: false });
@@ -149,11 +163,11 @@ function surface(b: Batch, s: SurfSeg) {
 }
 
 /** A beam from a to b (a box `t` thick and `tall` high, tilted to follow the slope). */
-function beam(b: Batch, mat: THREE.Material, ax: number, ay: number, az: number, bx: number, by: number, bz: number, t: number, tall = t) {
+function beam(b: Batch, mat: THREE.Material, ax: number, ay: number, az: number, bx: number, by: number, bz: number, t: number, tall = t, uvs: 'keep' | 'world' = 'keep') {
   const dx = bx - ax, dy = by - ay, dz = bz - az, run = Math.hypot(dx, dz);
   const g = new THREE.BoxGeometry(Math.hypot(run, dy), tall, t);
   g.rotateZ(Math.atan2(dy, run));
-  b.put(mat, g, (ax + bx) / 2, (ay + by) / 2, (az + bz) / 2, Math.atan2(-dz, dx));
+  b.put(mat, g, (ax + bx) / 2, (ay + by) / 2, (az + bz) / 2, Math.atan2(-dz, dx), 1, uvs);
 }
 
 /** The two ends of side `s` of `r`, a few cm inside it. */
@@ -167,7 +181,8 @@ function sideLine(r: Rect, s: Side, inset = 0.04): [number, number, number, numb
 /** Where slides leave the tower decks: the railings have a gap there (the sim's railing is still solid). */
 const slideStarts: V3[] = Object.values(RIDES).flatMap((r) => (r.segs[0].type === 'path' && r.id !== 'drop' && r.id !== 'zip' && r.segs[0].pts[0][1] > 15 ? [r.segs[0].pts[0]] : []));
 
-/** A railing from (ax, ay, az) to (bx, by, bz) (heights are the walking surface): handrail, mid rail, balusters. */
+/** A railing from (ax, ay, az) to (bx, by, bz) (heights are the walking surface): handrail, mid rail, kick
+ * plate, posts about every metre, and safety mesh in between. */
 function railing(b: Batch, ax: number, ay: number, az: number, bx: number, by: number, bz: number) {
   // Level railings (decks) leave a gap where a slide starts.
   if (ay === by) {
@@ -186,12 +201,12 @@ function railing(b: Batch, ax: number, ay: number, az: number, bx: number, by: n
   beam(b, steel, ax, ay + RAIL_H, az, bx, by + RAIL_H, bz, 0.06);
   beam(b, steel, ax, ay + RAIL_H / 2, az, bx, by + RAIL_H / 2, bz, 0.03);
   beam(b, darkSteel, ax, ay + 0.06, az, bx, by + 0.06, bz, 0.04, 0.12); // kick plate
-  const len = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.round(len / 0.13));
+  // The mesh, from just above the kick plate to just under the handrail.
+  beam(b, safetyMesh, ax, ay + 0.12 + (RAIL_H - 0.15) / 2, az, bx, by + 0.12 + (RAIL_H - 0.15) / 2, bz, 0.01, RAIL_H - 0.15, 'world');
+  const len = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.round(len / 1.2));
   for (let i = 0; i <= n; i++) {
-    const f = i / n, y = ay + (by - ay) * f;
-    const post = i === 0 || i === n;
-    const w = post ? 0.06 : 0.022;
-    b.box(post ? darkSteel : steel, ax + (bx - ax) * f - w / 2, y, az + (bz - az) * f - w / 2, ax + (bx - ax) * f + w / 2, y + RAIL_H, az + (bz - az) * f + w / 2);
+    const f = i / n, y = ay + (by - ay) * f, w = 0.05;
+    b.box(darkSteel, ax + (bx - ax) * f - w / 2, y, az + (bz - az) * f - w / 2, ax + (bx - ax) * f + w / 2, y + RAIL_H, az + (bz - az) * f + w / 2);
   }
 }
 

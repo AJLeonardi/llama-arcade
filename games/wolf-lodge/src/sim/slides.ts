@@ -8,7 +8,7 @@
 // - The zip line at the end of the ropes course (in the adventure wing).
 import { PathBuilder, pathSeg, surfaceFrom, wallSlope, DS, type RideDef, type SurfSeg } from './ride';
 import { boxes, dips, pools, ROPES_HIGH, spots, type V3 } from './world';
-import { spiralStairs, stairBoxes, switchbackStairs, type Piece } from './stairs';
+import { registerStairs, spiralStairs, stairBoxes, switchbackStairs, type Piece } from './stairs';
 
 /** A slide tower: a stair tower with a deck on top. */
 export interface Tower { x: number; z: number; w: number; top: number; name: string }
@@ -271,7 +271,10 @@ export const TOWER_RIDES = ['twister', 'dipper', 'bowl'];
 
 // The towers' stairs: walk up them (or use the button at the bottom for a quick climb). Railings all round.
 export const TOWER_STAIRS: Piece[][] = [spiralStairs(TOWER, 6), switchbackStairs(DROP_TOWER, 16)];
-for (const p of TOWER_STAIRS) boxes.push(...stairBoxes(p));
+for (const p of TOWER_STAIRS) {
+  boxes.push(...stairBoxes(p));
+  registerStairs(p);
+}
 // At the top: pick a slide, or step into the drop capsule.
 spots.push({ id: 'towerTop', kind: 'ride', x: TOWER.x - 1, y: TOWER.top, z: TOWER.z, r: 2.4, label: '🛝 Pick a slide' });
 spots.push({ id: 'dropTop', kind: 'ride', x: DROP_TOWER.x, y: DROP_TOWER.top, z: DROP_TOWER.z, r: 1.6, label: '🐺 Step into the capsule', ride: 'drop' });

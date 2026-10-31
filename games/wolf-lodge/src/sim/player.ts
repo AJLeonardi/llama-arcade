@@ -2,6 +2,7 @@
 // up and slows down over a few steps, turns to face where it's going before it gets going, walks or runs
 // depending on how far the stick is pushed, slows down in water, and steps up stairs and kerbs.
 import { ADV, ceilingAt, groundAt, pushOut, WATER_Y, type Box } from './world';
+import { stairGuide } from './stairs';
 
 export const STEP = 1 / 120;
 export const GRAVITY = 9.81;
@@ -51,9 +52,17 @@ export class Player {
   private lastPlat: Box | null = null;
   private onCourse = false;
   private jumpWas = false;
+  /** Going up (1) or down (-1) the tower stairs, so a corner doesn't turn you round. */
+  private stairWay: 1 | -1 | 0 = 0;
+  private backWas = false;
 
   place(x: number, y: number, z: number, yaw: number) {
     Object.assign(this, { x, y, z, yaw, vx: 0, vy: 0, vz: 0, onGround: true, harness: 0 });
+  }
+
+  /** On the tower stairs (going up or down them)? */
+  get onStairs() {
+    return this.stairWay !== 0;
   }
 
   get speed() {
@@ -80,6 +89,19 @@ export class Player {
       mx /= mag;
       mz /= mag;
       mag = 1;
+    }
+    // On the slide towers' stairs, going up or down follows the stairs round the corners.
+    if (mag > 0.08 && this.onGround) {
+      // Stick forward (or held back): keep going the way you're going. Just pulled back: turn round.
+      const fwd = inp.y > 0.3 && inp.y >= Math.abs(inp.x), back = inp.y < -0.3 && -inp.y >= Math.abs(inp.x);
+      const prefer = (back && !this.backWas ? -this.stairWay : this.stairWay) as 1 | -1 | 0;
+      this.backWas = back;
+      const g = stairGuide(this.x, this.y, this.z, mx / mag, mz / mag, prefer, fwd || back);
+      this.stairWay = g ? g.way : 0;
+      if (g) [mx, mz] = [g.dir[0] * mag, g.dir[1] * mag];
+    } else if (mag <= 0.08) {
+      this.stairWay = 0;
+      this.backWas = false;
     }
     // A gentle push walks; a full push runs.
     let want = mag < 0.08 ? 0 : mag < 0.7 ? (mag / 0.7) * WALK : WALK + ((mag - 0.7) / 0.3) * (RUN - WALK);

@@ -204,7 +204,8 @@ function walkCamera(dt: number, now: number) {
   if (now - lastLook > 1.2 && player.speed > 0.5) {
     let d = player.yaw - camYaw;
     d = Math.atan2(Math.sin(d), Math.cos(d));
-    camYaw += d * Math.min(1, dt * 1.2 * Math.min(1, player.speed / 2));
+    // On the tower stairs the camera swings round behind you faster, for the corners and U-turns.
+    camYaw += d * Math.min(1, dt * (player.onStairs ? 3.5 : 1.2) * Math.min(1, player.speed / 2));
   }
   const tgt = new THREE.Vector3(player.x, player.y + (player.harness > 0 ? -0.6 : 1.25), player.z);
   camTarget.lerp(tgt, camReady ? Math.min(1, dt * 12) : 1);
