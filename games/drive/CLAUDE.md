@@ -23,7 +23,7 @@ npm run check                       # everything (all games' tests, typecheck, b
 node games/drive/scripts/make-icons.mjs   # regenerate public/games/drive/icon-*.png
 ```
 
-Debug mode is **on by default** for now (device testing); `?debug=0` turns it off. It shows an
+Debug mode is off unless the URL has `?debug=1`. It shows an
 FPS/draw-call/triangle overlay, logs `[crash]` impacts and `[perf]` world build time, and exposes
 `window.__game` for poking at the running game from the console. The title screen shows the build number (the arcade's git commit count, injected in the root `vite.config.ts`; CI fetches full history for it). Offline support and the newer-build check come from `shared/pwa.ts` (`main.ts` calls `startPwa`, which calls `Game.offerUpdate`), and the Garage menu's 🏠 Arcade button calls `shared/home.ts:goToArcade`.
 

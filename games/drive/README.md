@@ -33,7 +33,7 @@ npm run dev               # http://localhost:5173/games/drive/, also on your Wi-
 npx vitest run games/drive   # physics, damage, layout and loop tests (headless)
 ```
 
-The FPS / draw-call overlay and crash logging are **on by default** for now (device testing). Add `?debug=0` to the URL to hide them.
+The FPS / draw-call overlay and crash logging are off. Add `?debug=1` to the URL to show them (handy for checking speed on a device).
 
 ## Put it on the iPad
 

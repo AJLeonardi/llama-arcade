@@ -54,7 +54,9 @@ export default defineConfig({
     chunkSizeWarningLimit: 4000,
     rollupOptions: { input: pages() },
   },
-  server: { host: true },
+  // strictPort: if 5173 is taken (often by an old Llama Drive dev server), fail instead of quietly using
+  // 5174, which leaves localhost:5173 showing the wrong game.
+  server: { host: true, strictPort: true },
   test: {
     include: ['games/*/tests/**/*.test.ts', 'shared/**/*.test.ts'],
     testTimeout: 30000,

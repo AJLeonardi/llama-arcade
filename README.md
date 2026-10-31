@@ -32,5 +32,8 @@ npm run dev                       # http://localhost:5173 (also on your Wi-Fi fo
 npm run check                     # all tests + build + smoke test of every page
 ```
 
+If localhost:5173 shows the wrong game (say, Llama Drive when you opened another game), an old dev
+server from another folder is holding the port. See "Wrong game on localhost:5173?" in `CLAUDE.md`.
+
 Pushing to `main` tests and deploys everything (`.github/workflows/deploy.yml`). If anything fails,
 nothing is deployed. See `CLAUDE.md` for how the repo is organised and the rules for shared code.
