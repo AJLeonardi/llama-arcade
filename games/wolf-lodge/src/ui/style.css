@@ -1,0 +1,123 @@
+html, body {
+  margin: 0; height: 100%; background: #2a1a10; overflow: hidden; touch-action: none;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  font-family: 'Avenir Next Rounded', 'Arial Rounded MT Bold', 'Avenir Next', system-ui, sans-serif;
+  color: #fff;
+}
+canvas#game { display: block; width: 100vw; height: 100vh; }
+button { font: inherit; color: inherit; border: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.hidden { display: none !important; }
+
+/* ---- HUD ---- */
+.hud { position: fixed; inset: 0; pointer-events: none; }
+.hud > * { pointer-events: auto; }
+.pill {
+  position: absolute; top: max(12px, env(safe-area-inset-top)); padding: 8px 16px; border-radius: 999px;
+  background: rgba(40, 24, 14, 0.6); font-size: 20px; font-weight: 800; pointer-events: none; white-space: nowrap;
+}
+.area { left: 50%; transform: translateX(-50%); }
+.band { left: max(14px, env(safe-area-inset-left)); }
+.quest { left: max(14px, env(safe-area-inset-left)); top: calc(max(12px, env(safe-area-inset-top)) + 50px); background: rgba(80, 40, 140, 0.7); }
+.pause-btn, .cam-btn {
+  position: absolute; top: max(10px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right));
+  width: 58px; height: 58px; border-radius: 16px; background: rgba(40, 24, 14, 0.6); font-size: 28px;
+}
+.cam-btn { right: calc(max(14px, env(safe-area-inset-right)) + 68px); }
+.round-btn {
+  position: absolute; border-radius: 50%; border: 4px solid rgba(255, 255, 255, 0.85); font-weight: 900; color: #fff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+.jump-btn {
+  right: max(28px, env(safe-area-inset-right)); bottom: max(28px, env(safe-area-inset-bottom));
+  width: 110px; height: 110px; background: rgba(31, 122, 140, 0.5); font-size: 24px;
+}
+.jump-btn:active { background: rgba(31, 122, 140, 0.8); transform: scale(0.95); }
+.action-btn {
+  position: absolute; right: max(150px, calc(env(safe-area-inset-right) + 150px)); bottom: max(40px, env(safe-area-inset-bottom));
+  padding: 18px 26px; border-radius: 22px; background: #f2b51c; color: #3a2008; font-size: 24px; font-weight: 900;
+  box-shadow: 0 6px 0 #a87708, 0 8px 20px rgba(0, 0, 0, 0.3); animation: bob 1.2s ease-in-out infinite;
+}
+.action-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #a87708; }
+@keyframes bob { 50% { transform: translateY(-4px); } }
+.build { position: fixed; right: 8px; bottom: 4px; font-size: 11px; opacity: 0.5; pointer-events: none; }
+.update-btn {
+  position: fixed; top: max(80px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  background: #ffe066; color: #3a2008; padding: 12px 20px; border-radius: 16px; font-weight: 800; font-size: 20px;
+}
+.toast {
+  position: fixed; top: 22%; left: 50%; transform: translateX(-50%); background: rgba(20, 12, 8, 0.78);
+  padding: 14px 24px; border-radius: 18px; font-size: 24px; font-weight: 800; pointer-events: none; text-align: center; max-width: 80vw;
+}
+.big-text {
+  position: fixed; top: 35%; left: 50%; transform: translate(-50%, -50%); font-size: 120px; font-weight: 900;
+  text-shadow: 0 6px 0 rgba(0, 0, 0, 0.35), 0 0 30px rgba(255, 200, 80, 0.8); pointer-events: none;
+}
+.big-text.pop { animation: pop 0.5s ease-out; }
+@keyframes pop { from { transform: translate(-50%, -50%) scale(1.8); opacity: 0; } }
+
+/* ---- ride controls ---- */
+.ride { position: absolute; inset: 0; pointer-events: none; }
+.ride > * { pointer-events: auto; }
+.speed {
+  position: absolute; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; background: rgba(20, 12, 8, 0.6); padding: 8px 16px; border-radius: 999px; pointer-events: none;
+}
+.speed-num { font-size: 22px; font-weight: 900; min-width: 80px; text-align: right; }
+.speed-bar { width: 160px; height: 14px; border-radius: 7px; background: rgba(255, 255, 255, 0.25); overflow: hidden; }
+.speed-fill { height: 100%; width: 0; background: linear-gradient(90deg, #3fb4d0, #f2b51c, #e8452c); }
+.ride-btn {
+  position: absolute; bottom: max(24px, env(safe-area-inset-bottom)); width: 104px; height: 104px; border-radius: 28px;
+  font-size: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;
+  border: 4px solid rgba(255, 255, 255, 0.8);
+}
+.ride-btn small { font-size: 15px; font-weight: 900; margin-top: 4px; }
+.faster { right: max(24px, env(safe-area-inset-right)); background: rgba(232, 69, 44, 0.6); }
+.slower { left: max(24px, env(safe-area-inset-left)); background: rgba(63, 180, 208, 0.6); }
+.getout { right: max(140px, calc(env(safe-area-inset-right) + 140px)); background: rgba(242, 181, 28, 0.75); }
+.ride-btn:active { transform: scale(0.94); }
+
+/* The joystick from shared/controls.ts. */
+.stick-base {
+  position: fixed; left: -60px; top: -60px; width: 120px; height: 120px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2); border: 3px solid rgba(255, 255, 255, 0.6); display: none; pointer-events: none;
+}
+.stick-base.on { display: block; }
+.stick-knob { position: absolute; left: 30px; top: 30px; width: 60px; height: 60px; border-radius: 50%; background: rgba(255, 255, 255, 0.85); }
+
+/* ---- screens ---- */
+.screen {
+  position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; padding: 20px; box-sizing: border-box;
+}
+.screen.menu { background: rgba(30, 18, 10, 0.55); }
+.screen.title { background: linear-gradient(180deg, rgba(20, 30, 40, 0.15), rgba(30, 18, 10, 0.6)); }
+.screen.fade { background: #000; transition: background 0.5s; }
+.screen h2 { margin: 0; font-size: 34px; text-shadow: 0 3px 0 rgba(0, 0, 0, 0.3); text-align: center; }
+.screen .sub { margin: 0; font-size: 20px; opacity: 0.9; }
+.logo { text-align: center; text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35), 0 0 24px rgba(0, 0, 0, 0.4); }
+.logo-big { font-family: Georgia, 'Times New Roman', serif; font-size: clamp(44px, 8vw, 92px); font-weight: 900; color: #f4e2b8; line-height: 1; }
+.logo-small { font-size: clamp(18px, 2.4vw, 26px); font-weight: 800; letter-spacing: 2px; }
+.big-btn {
+  background: #f2b51c; color: #3a2008; font-size: 32px; font-weight: 900; padding: 18px 44px; border-radius: 24px;
+  box-shadow: 0 7px 0 #a87708;
+}
+.big-btn:active { transform: translateY(4px); box-shadow: 0 3px 0 #a87708; }
+.small-btn { background: rgba(255, 255, 255, 0.2); font-size: 20px; font-weight: 800; padding: 12px 24px; border-radius: 16px; }
+.cards { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+.card {
+  width: 230px; background: #fdf6e8; color: #3a2008; border-radius: 20px; border: 5px solid; overflow: hidden; padding: 0 0 14px;
+  text-align: left; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35); position: relative;
+}
+.card:active { transform: scale(0.97); }
+.card-head { color: #fff; font-size: 22px; font-weight: 900; padding: 12px; text-align: center; }
+.card ul { margin: 10px 0; padding: 0 14px 0 30px; font-size: 16px; font-weight: 700; }
+.card li { margin: 4px 0; }
+.price { text-align: center; font-size: 22px; font-weight: 900; }
+.yours { position: absolute; top: 8px; right: 8px; background: #3a2008; color: #fff; font-size: 12px; padding: 3px 8px; border-radius: 8px; }
+.choices { display: flex; flex-direction: column; gap: 12px; min-width: min(420px, 90vw); }
+.choice {
+  background: rgba(31, 122, 140, 0.9); font-size: 24px; font-weight: 900; padding: 14px 20px; border-radius: 18px; text-align: left;
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.25); display: flex; flex-direction: column;
+}
+.choice small { font-size: 15px; font-weight: 700; opacity: 0.9; margin-top: 4px; }
+.choice:active { transform: translateY(3px); }

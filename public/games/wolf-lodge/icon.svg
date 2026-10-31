@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a8fd0"/><stop offset="1" stop-color="#9fd4f0"/></linearGradient>
+    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3fb4d0"/><stop offset="1" stop-color="#1f7a8c"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <!-- the lodge -->
+  <polygon points="40,250 256,110 472,250" fill="#3e4a36"/>
+  <rect x="70" y="240" width="372" height="170" fill="#8a5a30"/>
+  <g stroke="#5e3a1c" stroke-width="6">
+    <line x1="70" y1="270" x2="442" y2="270"/><line x1="70" y1="300" x2="442" y2="300"/>
+    <line x1="70" y1="330" x2="442" y2="330"/><line x1="70" y1="360" x2="442" y2="360"/><line x1="70" y1="390" x2="442" y2="390"/>
+  </g>
+  <!-- a twisty red tube slide down the front -->
+  <path d="M120 150 C 260 170, 60 230, 220 260 S 380 300, 300 360 S 160 400, 250 440" fill="none" stroke="#b02520" stroke-width="44" stroke-linecap="round"/>
+  <path d="M120 150 C 260 170, 60 230, 220 260 S 380 300, 300 360 S 160 400, 250 440" fill="none" stroke="#e8452c" stroke-width="30" stroke-linecap="round"/>
+  <!-- the yellow funnel -->
+  <path d="M330 120 L470 120 L418 210 L382 210 Z" fill="#f2b51c" stroke="#b07a08" stroke-width="6"/>
+  <!-- splash water -->
+  <rect x="0" y="420" width="512" height="92" fill="url(#water)"/>
+  <path d="M0 430 Q 64 410 128 430 T 256 430 T 384 430 T 512 430" fill="none" stroke="#e8f8ff" stroke-width="8"/>
+  <circle cx="250" cy="440" r="26" fill="#2f9be0" stroke="#e8f8ff" stroke-width="6"/>
+  <text x="256" y="96" font-family="Georgia, serif" font-weight="bold" font-size="64" text-anchor="middle" fill="#fff" stroke="#3a2008" stroke-width="3">🐺🦙</text>
+</svg>

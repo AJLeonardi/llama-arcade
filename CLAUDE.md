@@ -12,7 +12,8 @@ one deploy (GitHub Pages).
 - **To make a new game, use the `/new-game` skill** (`.claude/skills/new-game/SKILL.md`). It has the
   rules every game follows.
 - **Each game has its own `CLAUDE.md`** (`games/drive/CLAUDE.md`, `games/rocket/CLAUDE.md`,
-  `games/blox/CLAUDE.md`, `games/speed-run-am/CLAUDE.md`, `games/3d-skate/CLAUDE.md`). When working on one game, read only that game's folder (plus `shared/` if it
+  `games/blox/CLAUDE.md`, `games/speed-run-am/CLAUDE.md`, `games/3d-skate/CLAUDE.md`,
+  `games/wolf-lodge/CLAUDE.md`). When working on one game, read only that game's folder (plus `shared/` if it
   uses something from there).
 
 ## Commands
@@ -29,6 +30,21 @@ npm run icons        # icon.svg → icon-180/192/512.png in public/arcade and pu
 ```
 
 First time on a machine: `npm install && npx playwright install chromium`.
+
+### Wrong game on localhost:5173?
+
+If `localhost:5173/games/<id>/` shows **Llama Drive** (or any page that isn't the arcade's), another dev
+server is holding port 5173, usually one started in the old `llama-drive-open-world` repo. That repo's
+Vite serves its own `index.html` for every path. `npm run dev` here uses `strictPort`, so it stops with
+"Port 5173 is already in use" instead of quietly moving to 5174.
+
+```bash
+lsof -nP -iTCP:5173 -sTCP:LISTEN               # who has the port (PID)
+lsof -a -p <PID> -d cwd                        # which folder it was started in
+kill <PID>                                     # stop it, then `npm run dev` again
+```
+
+Before starting a dev server, check that nothing else is already on 5173.
 
 ## Layout
 
