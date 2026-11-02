@@ -300,6 +300,10 @@ function skyRoad(k: TownKit, r: SkyRoad, item: (x: number, z: number) => TownIte
         strip(Lb, L, (j) => V(f[run[j]].nx, 0, f[run[j]].nz), slab);
         strip(R, Rb, (j) => V(-f[run[j]].nx, 0, -f[run[j]].nz), slab);
         strip(Rb, Lb, () => V(0, -1, 0), slab);
+        // And a top just under the road: the road material doesn't write depth (it's
+        // made to lie on the ground), so without this the streets and water below
+        // could draw over it and you'd see through the deck.
+        strip(L, R, () => V(0, 1, 0), slab);
       }
       run = [];
     };
@@ -338,7 +342,11 @@ function skyRoad(k: TownKit, r: SkyRoad, item: (x: number, z: number) => TownIte
           const o = side * (r.ws[i] + 0.17);
           rail.push(V(f[i].x + f[i].nx * o, r.ys[i] + lift + 1.35, f[i].z + f[i].nz * o));
         }
-        for (let j = 0; j < rail.length - 1; j++) it.geos.push(['plain', strut(rail[j], rail[j + 1], 0.12, 0x9fa5ab)]);
+        for (let j = 0; j < rail.length - 1; j++) {
+          const i = i0 + j;
+          if (r.gaps.some((g) => g.side === side && i + 1 > g.i0 && i < g.i1)) continue; // open where an exit leaves
+          it.geos.push(['plain', strut(rail[j], rail[j + 1], 0.12, 0x9fa5ab)]);
+        }
       }
   }
   // Piers.
@@ -458,9 +466,19 @@ function bridgeSigns(k: TownKit) {
     k.box(it, a, c, y + 7.6, 0.6, 0.5, BRIDGE_HW * 2 + 2.4, 0x8d9399);
     k.board(it, ['WELCOME TO', 'SAN FRANCISCO'], '#0f6b3a', '#ffffff', a, c, y + 4.2, 16, 3.4, Math.PI / 2, 'bold {s}px Helvetica, Arial, sans-serif');
   }
+  // Where each exit leaves (city a), on each side: no sign posts there.
+  const open = br.gaps.map((g) => {
+    const [a0, a1] = [sfCoords(...br.pts[g.i0]).a, sfCoords(...br.pts[g.i1]).a];
+    return { side: g.side, lo: Math.min(a0, a1) - 6, hi: Math.max(a0, a1) + 6 };
+  });
   SKY.slice(1).forEach((r) => {
     const side = Math.sign(sfCoords(...r.pts[0]).b); // south exits head east, north ones west
-    const a = sfCoords(...r.pts[0]).a - side * 110, y = bridgeHeight(a, yW, yE), b = side * (BRIDGE_HW + 0.7);
+    // 110 m before the exit, or nearer if that's in the way out of an earlier one.
+    const ahead = [110, 100, 90, 80, 70, 60, 50, 40, 30].find((d) => {
+      const a = sfCoords(...r.pts[0]).a - side * d;
+      return !open.some((o) => o.side === side && a > o.lo && a < o.hi);
+    }) ?? 110;
+    const a = sfCoords(...r.pts[0]).a - side * ahead, y = bridgeHeight(a, yW, yE), b = side * (BRIDGE_HW + 0.7);
     const it = k.item(a, b);
     for (const o of [-2.6, 2.6]) k.box(it, a + o, b, y + 1.1, 0.22, 3.6, 0.22, 0x7d8288);
     k.board(it, [`EXIT ${r.n} ↗`, EXIT_NAMES[r.n - 1]], '#0f6b3a', '#ffffff', a, b, y + 3.3, 7.5, 3.2, Math.PI / 2, 'bold {s}px Helvetica, Arial, sans-serif');
