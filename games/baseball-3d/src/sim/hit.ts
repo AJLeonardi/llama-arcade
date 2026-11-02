@@ -226,3 +226,30 @@ export function play(park: Park, c: Contact, skill = 1): BallInPlay {
   while (bases < 4 && run.first + run.each * bases + 0.4 < toBase(bases + 1)) bases++;
   return { flight, fielding: fl, result: bases as 1 | 2 | 3 | 4, quick: false };
 }
+
+/** Where the ball goes after it's fielded, and who catches it there. */
+export interface Relay {
+  base: 1 | 2;
+  /** Who covers the base; null = the fielder runs it to the bag himself. */
+  receiver: Pos | null;
+}
+
+/**
+ * Ground outs go to first, everything else back in to second. Someone is always on the bag: the first
+ * baseman (or the pitcher, when the first baseman fielded it away from the bag), and at second the middle
+ * infielder who didn't go for the ball.
+ */
+export function relayFor(park: Park, b: BallInPlay): Relay | null {
+  const fl = b.fielding;
+  if (!fl || b.result === 'foul' || b.result === 'hr') return null;
+  const base = b.result === 'out' && b.outHow === 'ground' ? 1 : 2;
+  const [bx, bz] = basePos(park, base);
+  const near = Math.hypot(fl.at[0] - bx, fl.at[1] - bz) < 8 * (park.base / 27.43);
+  if (base === 1) {
+    if (fl.pos === '1B') return { base, receiver: near ? null : 'P' };
+    return { base, receiver: '1B' };
+  }
+  if (fl.pos === 'SS' || fl.pos === '2B') return { base, receiver: near ? null : fl.pos === 'SS' ? '2B' : 'SS' };
+  // Ball on the left side (+x): the shortstop goes out, the second baseman covers. Right side: the other way.
+  return { base, receiver: fl.at[0] > 0 ? '2B' : 'SS' };
+}

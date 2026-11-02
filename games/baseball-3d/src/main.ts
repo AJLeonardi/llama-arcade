@@ -13,7 +13,7 @@ import { Confetti } from '../../../shared/confetti';
 import { aiPitch, aiSwing } from './sim/ai';
 import { basePos, fielderHome, POSITIONS, type Park } from './sim/field';
 import { Game, type PlayOutcome } from './sim/game';
-import { pathAt, play, runTimes, swingResult, SWING_DELAY, THROW, TIMING, RUN_SPEED, type BallInPlay, type Contact } from './sim/hit';
+import { pathAt, play, relayFor, runTimes, swingResult, SWING_DELAY, THROW, TIMING, RUN_SPEED, type BallInPlay, type Contact, type Relay } from './sim/hit';
 import { inZone, makePitch, MPH, pitchPos, zoneFor, type Pitch, type PitchType } from './sim/pitch';
 import { afterGame, CAREER, lineup, NEW_CAREER, parkOf, team, TEAMS, type CareerSave, type Player, type Team } from './sim/teams';
 import { buildPark, type ParkView } from './view/park';
@@ -604,6 +604,8 @@ function hitBall(c: Contact) {
     if (bip.result !== 'out') st.h++;
     outcome = g.inPlay(bip);
   }
+  relay = relayFor(M.park, bip);
+  fieldAnim.fill('ready');
   playLen = playLength(bip);
   setPhase('inplay');
   if (bip.result === 'hr') {
@@ -631,34 +633,72 @@ function inPlay() {
   const f = bip.flight, fl = bip.fielding;
   const fs = M.fielders[fieldSide];
   const run = runTimes(M.park);
-  // The ball.
+  // The ball: along its flight until the fielder has it, then thrown to whoever covers the base (or run
+  // to the bag by the fielder himself).
   const pathEnd = (f.path.length - 1) / 30;
+  const speed = RUN_SPEED * (M.park.kind === 'backyard' ? 0.75 : 1);
+  const glove = 1.2 * M.scale;
+  const bag = relay ? basePos(M.park, relay.base) : null;
+  const ri = relay?.receiver ? POSITIONS.indexOf(relay.receiver) : -1;
+  // The receiver waits half a metre off the bag, toward the throw.
+  let cover: [number, number] | null = null, coverAt = 0, throwStart = 0, throwLen = 0;
+  if (fl && bag && ri >= 0) {
+    const dx = fl.at[0] - bag[0], dz = fl.at[1] - bag[1], l = Math.hypot(dx, dz) || 1;
+    cover = [bag[0] + (dx / l) * 0.5, bag[1] + (dz / l) * 0.5];
+    const rh = fielderHome(M.park, POSITIONS[ri]);
+    coverAt = 0.3 + Math.hypot(cover[0] - rh[0], cover[1] - rh[1]) / speed;
+    throwLen = Math.hypot(cover[0] - fl.at[0], cover[1] - fl.at[1]) / THROW;
+    throwStart = Math.max(pathEnd + 0.45, coverAt - throwLen);
+  }
   if (t <= pathEnd || !fl) {
     ballMesh.position.set(...pathAt(f, Math.min(t, pathEnd)));
-  } else {
-    // In the fielder's glove, then thrown in: to first on a ground ball, else to second.
-    const to = bip.result === 'out' && bip.outHow === 'ground' ? basePos(M.park, 1) : basePos(M.park, 2);
-    const d = Math.hypot(to[0] - fl.at[0], to[1] - fl.at[1]);
-    const tt = (t - pathEnd - 0.45) / (d / THROW);
-    if (tt < 0) ballMesh.position.set(fl.at[0], 1.2 * M.scale, fl.at[1]);
+  } else if (cover) {
+    const u = (t - throwStart) / throwLen;
+    if (u < 0) ballMesh.position.set(fl.at[0], glove, fl.at[1]);
     else {
-      const u = Math.min(1, tt);
-      ballMesh.position.set(fl.at[0] + (to[0] - fl.at[0]) * u, 1.2 * M.scale + Math.sin(u * Math.PI) * d * 0.06, fl.at[1] + (to[1] - fl.at[1]) * u);
+      const k = Math.min(1, u), d = throwLen * THROW;
+      ballMesh.position.set(fl.at[0] + (cover[0] - fl.at[0]) * k, glove + Math.sin(k * Math.PI) * d * 0.06, fl.at[1] + (cover[1] - fl.at[1]) * k);
     }
   }
-  // The fielder who gets it runs there; the others take a few steps toward the ball.
+  // The fielders: the one who gets it runs there (and on to the bag if it's his), the one covering runs
+  // to the base, the rest stay put (on a home run they chase it to the wall).
   const ball = ballMesh.position;
+  const moveTo = (p: Person, from: [number, number], to: [number, number], after: number) => {
+    const dx = to[0] - from[0], dz = to[1] - from[1], d = Math.hypot(dx, dz);
+    if (d < 0.01) return true;
+    const gone = Math.min(d, Math.max(0, (t - after) * speed));
+    p.root.position.x = from[0] + (dx / d) * gone;
+    p.root.position.z = from[1] + (dz / d) * gone;
+    if (gone < d - 0.05) p.root.rotation.y = Math.atan2(dx, dz);
+    return gone >= d - 0.05;
+  };
   fs.forEach((p, i) => {
     const pos = POSITIONS[i];
+    if (pos === 'C') return;
     const home = fielderHome(M!.park, pos);
-    const goal: [number, number] = fl && fl.pos === pos ? fl.at : bip!.result === 'hr' ? [ball.x, ball.z] : home;
-    const speed = RUN_SPEED * (M!.park.kind === 'backyard' ? 0.75 : 1);
-    const dx = goal[0] - home[0], dz = goal[1] - home[1], d = Math.hypot(dx, dz);
-    const gone = Math.min(d, Math.max(0, (t - 0.4) * speed));
-    if (pos === 'C' || d < 0.01) return;
-    p.root.position.x = home[0] + (dx / d) * gone;
-    p.root.position.z = home[1] + (dz / d) * gone;
-    if (gone < d - 0.05) p.root.rotation.y = Math.atan2(dx, dz);
+    let anim: FieldAnim = 'ready';
+    if (fl && fl.pos === pos) {
+      const there = moveTo(p, home, fl.at, 0.4);
+      anim = t < fl.t ? (there ? 'catch' : 'run') : 'catch';
+      if (t >= pathEnd && bag && relay && !relay.receiver) {
+        // His bag: run it there and step on it.
+        const done = moveTo(p, fl.at, bag, pathEnd);
+        anim = done ? 'catch' : 'run';
+        ball.set(p.root.position.x, glove * 0.8, p.root.position.z);
+      } else if (cover && t >= throwStart) anim = 'ready';
+    } else if (i === ri && cover) {
+      const there = moveTo(p, home, cover, 0.3);
+      anim = there ? (t >= throwStart - 0.4 ? 'catch' : 'ready') : 'run';
+      if (there && t < throwStart) p.root.rotation.y = Math.atan2(fl!.at[0] - cover[0], fl!.at[1] - cover[1]);
+    } else if (bip!.result === 'hr' && !isInfielderPos(pos)) {
+      anim = moveTo(p, home, [ball.x * 0.97, ball.z * 0.97], 0.4) ? 'ready' : 'run';
+    }
+    if (pos === 'P') {
+      // Off the mound, down to the ground.
+      const off = Math.hypot(p.root.position.x - home[0], p.root.position.z - home[1]);
+      p.root.position.y = 0.25 * (M!.park.base / 27.43) * Math.max(0, 1 - off / (2.7 * (M!.park.base / 27.43)));
+    }
+    fieldAnim[i] = anim;
   });
   // The runners.
   const bt = M.hitters[battingSide];
@@ -696,6 +736,11 @@ function inPlay() {
   }
 }
 let fieldSide: 0 | 1 = 1;
+let relay: Relay | null = null;
+type FieldAnim = 'ready' | 'run' | 'catch';
+/** What each fielder is doing during a ball in play (set by inPlay, drawn by draw). */
+const fieldAnim: FieldAnim[] = POSITIONS.map(() => 'ready');
+const isInfielderPos = (p: string) => p !== 'LF' && p !== 'CF' && p !== 'RF';
 let battingSide: 0 | 1 = 0;
 
 function finishPitch(o: PlayOutcome) {
@@ -795,7 +840,7 @@ function draw(dt: number) {
   // Pitcher.
   const pitcherP = fs[0];
   const pitchS = phase === 'windup' || phase === 'flight' || phase === 'inplay' ? Math.min(1, windT / WINDUP) : 0;
-  if (phase === 'inplay' && bip && bip.fielding?.pos === 'P') pitcherP.pose({ mode: 'walk', speed: 4, phase: clock * 9, t: clock });
+  if (phase === 'inplay' && fieldAnim[0] !== 'ready') fielderPose(pitcherP, 0);
   else pitcherP.pose({ mode: pitchS > 0 ? 'pitch' : 'stand', s: pitchS, t: clock });
   pitcherP.setGear({ ball: pitchS < RELEASE_S });
   // Catcher: glove up as the target, then out to the ball.
@@ -811,11 +856,7 @@ function draw(dt: number) {
   // Fielders.
   fs.forEach((p, i) => {
     if (i < 2) return;
-    const moving = phase === 'inplay' && bip && (bip.fielding?.pos === POSITIONS[i] || bip.result === 'hr');
-    if (moving && bip?.fielding && pt >= bip.fielding.t && bip.fielding.pos === POSITIONS[i]) {
-      const local = p.root.worldToLocal(ballMesh.position.clone());
-      p.pose({ mode: 'reach', t: clock, glove: local });
-    } else if (moving) p.pose({ mode: 'walk', speed: 6, phase: clock * 10, t: clock });
+    if (phase === 'inplay') fielderPose(p, i);
     else p.pose({ mode: 'ready', t: clock + i });
   });
   // Batter and runners.
@@ -889,6 +930,18 @@ function draw(dt: number) {
   camera.updateProjectionMatrix();
   sun.target.position.set(camLook.x * 0.5, 0, Math.max(5, camLook.z * 0.5));
   if (!M.park.night) sun.position.copy(sun.target.position).add(su.sunPosition.value.clone().multiplyScalar(120));
+}
+
+function fielderPose(p: Person, i: number) {
+  const a = fieldAnim[i];
+  if (a === 'run') p.pose({ mode: 'walk', speed: 6, phase: clock * 10 + i, t: clock });
+  else if (a === 'catch') {
+    // Glove out toward the ball (no further than an arm's reach).
+    const local = p.root.worldToLocal(ballMesh.position.clone());
+    const chest = new THREE.Vector3(0, 1.0, 0.1);
+    local.sub(chest).clampLength(0, 0.6).add(chest);
+    p.pose({ mode: 'reach', t: clock, glove: local });
+  } else p.pose({ mode: 'ready', t: clock + i });
 }
 
 // ---------------------------------------------------------------- menus
@@ -1030,7 +1083,7 @@ title();
 requestAnimationFrame(frame);
 startPwa({ onUpdate: () => (appMode === 'title' ? reloadForUpdate() : ui.showUpdate()) });
 
-(window as unknown as { __ball: unknown }).__ball = { get M() { return M; }, get phase() { return phase; }, get pitch() { return pitch; }, get flightT() { return flightT; }, get dbg() { return { resolved, missed, swingAt, aiPlan, appMode }; }, oval, aim, action,
+(window as unknown as { __ball: unknown }).__ball = { get M() { return M; }, get phase() { return phase; }, get pitch() { return pitch; }, get flightT() { return flightT; }, get dbg() { return { resolved, missed, swingAt, aiPlan, appMode, relay, bip, fieldAnim }; }, oval, aim, action, hitBall,
   /** Step the game by hand (the browser pane throttles frames when hidden). */
   tick(n = 1, render = true) { for (let i = 0; i < n; i++) { if (appMode === 'game') step(1 / 60); draw(1 / 60); confetti.update(1 / 60); } if (render) renderer.render(scene, camera); },
   scene, camera, renderer, save };

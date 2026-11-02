@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { PARKS, fenceDist } from '../src/sim/field';
-import { fly, play, swingResult, type Contact } from '../src/sim/hit';
+import { fly, play, relayFor, swingResult, type Contact } from '../src/sim/hit';
 import { makePitch, pitchPos, zoneFor } from '../src/sim/pitch';
 import { Game } from '../src/sim/game';
 import { aiPitch, aiSwing } from '../src/sim/ai';
@@ -139,5 +139,24 @@ describe('the career', () => {
     s = afterGame(s, false).save;
     expect(s.game).toBe(0);
     expect(s.stage).toBe(0);
+  });
+});
+
+describe('throws', () => {
+  test('a throw to first always has someone covering the bag', () => {
+    for (let a = -40; a <= 40; a += 2) {
+      for (const ev of [18, 24, 30]) {
+        const b = play(hs, { ev, la: deg(-10), spray: deg(a), quality: 0.5 });
+        const r = relayFor(hs, b);
+        if (!r) continue;
+        expect(r.receiver).not.toBe(b.fielding!.pos);
+        if (r.base === 1 && b.fielding!.pos === '1B' && r.receiver !== null) expect(r.receiver).toBe('P');
+      }
+    }
+  });
+  test('the first baseman fielding it far from the bag throws to the pitcher covering', () => {
+    const b = play(hs, { ev: 22, la: deg(-8), spray: deg(25), quality: 0.4 });
+    expect(b.fielding!.pos).toBe('1B');
+    expect(relayFor(hs, b)!.receiver).toBe('P');
   });
 });
