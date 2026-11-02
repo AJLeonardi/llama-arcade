@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d2a5c"/>
+      <stop offset="1" stop-color="#1d6b3a"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <!-- diamond -->
+  <path d="M256 330 L410 450 L256 560 L102 450 Z" fill="#b7804f"/>
+  <path d="M256 360 L370 450 L256 530 L142 450 Z" fill="#3f8530"/>
+  <!-- bat -->
+  <g transform="rotate(-38 256 256)">
+    <rect x="236" y="70" width="40" height="250" rx="20" fill="#c99a5c"/>
+    <rect x="246" y="300" width="20" height="120" rx="10" fill="#b5864c"/>
+    <rect x="236" y="410" width="40" height="18" rx="9" fill="#8a5a2c"/>
+  </g>
+  <!-- ball -->
+  <circle cx="330" cy="190" r="92" fill="#fbfaf5" stroke="#d8d3c4" stroke-width="6"/>
+  <path d="M268 128 C300 165 300 215 268 252" fill="none" stroke="#d8322f" stroke-width="9" stroke-dasharray="14 10"/>
+  <path d="M392 128 C360 165 360 215 392 252" fill="none" stroke="#d8322f" stroke-width="9" stroke-dasharray="14 10"/>
+  <text x="256" y="490" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="64" fill="#ffd21f" stroke="#0d2a5c" stroke-width="6" paint-order="stroke">3D</text>
+</svg>
