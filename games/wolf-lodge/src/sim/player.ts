@@ -46,6 +46,8 @@ export class Player {
   phase = 0;
   /** How much the body leans into a turn (radians, for the model). */
   lean = 0;
+  /** How fast you were going down when you last went into the water (m/s), for the size of the splash. */
+  splashSpeed = 0;
   /** Seconds left hanging in the ropes-course harness. */
   harness = 0;
   events: PlayerEvent[] = [];
@@ -185,13 +187,17 @@ export class Player {
         } else {
           this.vy = 0;
           this.onGround = true;
-          if (hit < -2) this.events.push(this.y < WATER_Y ? 'splash' : 'land');
+          if (hit < -2 && this.y >= WATER_Y) this.events.push('land'); // (under water, the splash was going in)
         }
       }
     }
+    // Splash: going in through the water's surface (jumping in, or stepping off the edge).
     const wetBefore = this.wet;
     this.wet = Math.max(0, WATER_Y - this.y);
-    if (wetBefore === 0 && this.wet > 0.3) this.events.push('splash');
+    if (wetBefore === 0 && this.wet > 0 && this.vy < -1) {
+      this.splashSpeed = -this.vy;
+      this.events.push('splash');
+    }
 
     // The ropes course: remember the last platform; a fall is caught by the harness.
     if (this.onGround && g.box) {

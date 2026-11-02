@@ -7,7 +7,7 @@
 // - Lazy River: float round in a tube.
 // - The zip line at the end of the ropes course (in the adventure wing).
 import { PathBuilder, pathSeg, surfaceFrom, wallSlope, DS, type RideDef, type SurfSeg } from './ride';
-import { boxes, dips, pools, ROPES_HIGH, spots, type V3 } from './world';
+import { boxes, dips, floorAt, pools, ROPES_HIGH, spots, WATER_Y, type V3 } from './world';
 import { registerStairs, spiralStairs, stairBoxes, switchbackStairs, type Piece } from './stairs';
 
 /** A slide tower: a stair tower with a deck on top. */
@@ -209,6 +209,78 @@ function river(at: number): RideDef {
     exit: { x: p[0] + ox * 3.4, y: 0, z: p[2] + oz * 3.4, yaw: Math.atan2(ox, oz) },
     blurb: 'Float round and round. Paddle to go faster, steer to the sides.',
   };
+}
+
+// ---------------------------------------------------------------- bridges and the island
+
+/**
+ * A footbridge across the river, running along x at `z`: a level deck over the water (`d0`..`d1`, top at `h`,
+ * high enough to float under) and a ramp down to the floor at each end (`x0`..`d0`, `d1`..`x1`).
+ */
+export interface Bridge { z: number; w: number; x0: number; x1: number; d0: number; d1: number; h: number }
+export const BRIDGES: Bridge[] = [];
+const RAMP = 4;
+
+/** The top of a bridge at x: smooth ramps up to the level deck. */
+export function bridgeY(b: Bridge, x: number) {
+  const f = x < b.d0 ? (x - b.x0) / (b.d0 - b.x0) : x > b.d1 ? (b.x1 - x) / (b.x1 - b.d1) : 1;
+  const c = Math.max(0, Math.min(1, f));
+  return b.h * c * c * (3 - 2 * c);
+}
+
+function bridge(z: number, xFrom: number, xTo: number, w = 2.4, h = 1.6) {
+  // Find where the water is under the whole width of the deck.
+  let lo = Infinity, hi = -Infinity;
+  for (let x = xFrom; x <= xTo; x += 0.05)
+    for (let dz = -w / 2; dz <= w / 2; dz += w / 8)
+      if (floorAt(x, z + dz) < 0) {
+        lo = Math.min(lo, x);
+        hi = Math.max(hi, x);
+      }
+  const b: Bridge = { z, w, d0: lo - 0.6, d1: hi + 0.6, x0: lo - 0.6 - RAMP, x1: hi + 0.6 + RAMP, h };
+  BRIDGES.push(b);
+  const z0 = z - w / 2, z1 = z + w / 2, T = 0.15;
+  // The deck over the water: you can walk (or float) underneath.
+  boxes.push({ x0: b.d0, y0: h - T, z0, x1: b.d1, y1: h, z1, mat: 'none', camera: true });
+  // The ramps: thin slices, solid down to the floor, each one a small step up.
+  const S = 0.25;
+  for (let x = b.x0; x < b.d0 - 1e-6; x += S) boxes.push({ x0: x, y0: 0, z0, x1: x + S, y1: bridgeY(b, x + S / 2), z1, mat: 'none', camera: true });
+  for (let x = b.d1; x < b.x1 - 1e-6; x += S) boxes.push({ x0: x, y0: 0, z0, x1: x + S, y1: bridgeY(b, x + S / 2), z1, mat: 'none', camera: true });
+  // Railings, higher than a jump: in 1 m pieces down the ramps, one piece along the deck.
+  const RT = 0.1, RH = 1.0;
+  for (const [a, c] of [[z0 - RT, z0], [z1, z1 + RT]]) {
+    boxes.push({ x0: b.d0, y0: h - T, z0: a, x1: b.d1, y1: h + RH, z1: c, mat: 'none' });
+    for (let x = b.x0 + 1; x < b.d0 - 1e-6; x += 1) boxes.push({ x0: x, y0: 0, z0: a, x1: Math.min(b.d0, x + 1), y1: bridgeY(b, Math.min(b.d0, x + 1)) + RH, z1: c, mat: 'none' });
+    for (let x = b.d1; x < b.x1 - 1 - 1e-6; x += 1) boxes.push({ x0: x, y0: 0, z0: a, x1: x + 1, y1: bridgeY(b, x) + RH, z1: c, mat: 'none' });
+  }
+  return b;
+}
+// One across each long side of the river, onto the island.
+bridge(-30, 10, 22);
+bridge(-62, 30, 42);
+
+/**
+ * Old Spitter, the island's attraction: a bronze llama standing on a rock in the middle of a round splash basin.
+ * Press the button and the geyser in front of the wolf blows (it also goes off on its own now and then).
+ */
+export const GEYSER = { x: 28.5, z: -42, basin: 4.2, depth: 0.45, rockR: 1.3, rockH: 1.5, vent: [28.5, -39.6] as [number, number], button: [31.2, -36.6] as [number, number] };
+dips.push({
+  depthAt: (x, z) => (Math.hypot(x - GEYSER.x, z - GEYSER.z) < GEYSER.basin ? GEYSER.depth : 0),
+});
+// The rock: solid, a little lumpy (two boxes).
+{
+  const { x, z, rockR: r, rockH: h } = GEYSER;
+  boxes.push({ x0: x - r, y0: -GEYSER.depth, z0: z - r * 0.7, x1: x + r, y1: h, z1: z + r * 0.7, mat: 'none', camera: true });
+  boxes.push({ x0: x - r * 0.7, y0: -GEYSER.depth, z0: z - r, x1: x + r * 0.7, y1: h, z1: z + r, mat: 'none', camera: true });
+}
+spots.push({ id: 'geyser', kind: 'geyser', x: GEYSER.button[0], y: 0, z: GEYSER.button[1], r: 1.8, label: '🦙 Make Old Spitter blow!' });
+
+/** Where falling water lands (for the splash blocks): a bridge, the rock, the water's surface or the floor. */
+export function splashFloor(x: number, z: number) {
+  for (const b of BRIDGES) if (x > b.x0 && x < b.x1 && Math.abs(z - b.z) < b.w / 2 + 0.1) return Math.max(bridgeY(b, x), floorAt(x, z) < 0 ? WATER_Y : 0);
+  const g = Math.hypot(x - GEYSER.x, z - GEYSER.z);
+  if (g < GEYSER.rockR) return GEYSER.rockH;
+  return floorAt(x, z) < 0 ? WATER_Y : 0;
 }
 
 // ---------------------------------------------------------------- the zip line

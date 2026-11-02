@@ -112,7 +112,7 @@ export const pools: Pool[] = [];
 
 // ---------------------------------------------------------------- action spots
 
-export type SpotKind = 'desk' | 'ride' | 'river' | 'wand' | 'rune' | 'dragon' | 'zip' | 'sleep' | 'clerk';
+export type SpotKind = 'desk' | 'ride' | 'river' | 'wand' | 'rune' | 'dragon' | 'zip' | 'sleep' | 'clerk' | 'geyser';
 export interface Spot { id: string; kind: SpotKind; x: number; y: number; z: number; r: number; label: string; ride?: string; rune?: number }
 export const spots: Spot[] = [];
 const spot = (s: Spot) => spots.push(s);

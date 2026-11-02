@@ -7,7 +7,9 @@ import {
   ADV, boxes, DESK, doors, floorAt, HALL, LOBBY, PARK, pools, ROOMS, ROPES_HIGH, ROPES_Y, RUNES, type Box, type Mat,
 } from '../sim/world';
 import { Batch } from './build';
+import { splashFloor } from '../sim/slides';
 import { pool, steel } from './slidesView';
+import { BlockWater } from './water';
 import * as T from './textures';
 
 function std(s: T.Surface, extra: THREE.MeshStandardMaterialParameters = {}) {
@@ -71,6 +73,7 @@ export interface LodgeView {
   doorMeshes: { id: number; pivot: THREE.Object3D; open: number; kind: 'swing' | 'slide' }[];
   runes: THREE.Mesh[];
   dragon: Dragon;
+  water: BlockWater;
   animate(dt: number, t: number): void;
 }
 
@@ -326,7 +329,8 @@ export function buildLodge(m: Mats): LodgeView {
   bucketMesh.position.y = 0.4;
   bucket.add(bucketMesh);
   group.add(bucket);
-  const water = new BlockWater(group);
+  // Splashing water (the bucket's, and the game's): lands on the fort's top deck, or wherever splashFloor says.
+  const water = new BlockWater(group, (x, z) => (Math.abs(x - FORT.x) < 3 && Math.abs(z - FORT.z) < 3 ? 4.8 : splashFloor(x, z)));
   let bucketT = 0;
 
   return {
@@ -334,6 +338,7 @@ export function buildLodge(m: Mats): LodgeView {
     doorMeshes,
     runes,
     dragon,
+    water,
     animate(dt, t) {
       (m.water.normalMap as THREE.Texture).offset.set(t * 0.02, t * 0.013);
       for (const f of fires) {
@@ -351,7 +356,7 @@ export function buildLodge(m: Mats): LodgeView {
       bucketT = (bucketT + dt) % 45;
       const tip = bucketT > 40 ? Math.sin(((bucketT - 40) / 5) * Math.PI) : 0;
       bucket.rotation.z = -tip * 2.0;
-      if (tip > 0.55) water.pour(dt, -bucket.rotation.z, (tip - 0.55) / 0.45);
+      if (tip > 0.55) pour(water, dt, -bucket.rotation.z, (tip - 0.55) / 0.45);
       water.step(dt);
       dragon.animate(dt, t);
       // Front doors open when someone's near (set by the game).
@@ -586,111 +591,18 @@ export const FORT = { x: -18, z: -8 };
 /** The tipping bucket's pivot: over the fort roof's east edge. */
 const BUCKET = { x: FORT.x + 3.0, y: 7.6 };
 
-/**
- * The bucket's water, made of blocks like everything in a game should be: big blocks pour out of the lip and
- * fall; when one hits the ground (or the fort's top deck) it smashes into little blocks that fly apart,
- * bounce once and shrink away.
- */
-class BlockWater {
-  private readonly big: THREE.InstancedMesh;
-  private readonly bits: THREE.InstancedMesh;
-  private readonly blocks: { p: THREE.Vector3; v: THREE.Vector3; s: number; spin: THREE.Vector3; r: THREE.Euler }[] = [];
-  private readonly pieces: { p: THREE.Vector3; v: THREE.Vector3; s: number; age: number; life: number; bounced: boolean; spin: THREE.Vector3; r: THREE.Euler }[] = [];
-  private carry = 0;
-  private readonly m = new THREE.Matrix4();
-  private readonly q = new THREE.Quaternion();
-  private readonly sc = new THREE.Vector3();
-  static readonly MAX_BIG = 260;
-  static readonly MAX_BITS = 1600;
-
-  constructor(parent: THREE.Object3D) {
-    const mat = new THREE.MeshStandardMaterial({ color: '#6fd0f2', roughness: 0.08, metalness: 0, transparent: true, opacity: 0.78, emissive: '#1a6f96', emissiveIntensity: 0.25 });
-    const geo = new THREE.BoxGeometry(1, 1, 1);
-    this.big = new THREE.InstancedMesh(geo, mat, BlockWater.MAX_BIG);
-    this.bits = new THREE.InstancedMesh(geo, mat, BlockWater.MAX_BITS);
-    for (const im of [this.big, this.bits]) {
-      im.count = 0;
-      im.frustumCulled = false;
-      im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      parent.add(im);
-    }
-  }
-
-  /** Where blocks land: the fort's top deck, or the floor. */
-  private floor(x: number, z: number) {
-    return Math.abs(x - FORT.x) < 3 && Math.abs(z - FORT.z) < 3 ? 4.8 : 0;
-  }
-
-  /** Pour for `dt` seconds with the bucket tipped `angle` (radians); `flow` 0..1. */
-  pour(dt: number, angle: number, flow: number) {
-    this.carry += dt * 90 * flow;
-    // The middle of the bucket's rim, and the way out of it.
-    const ox = Math.sin(angle), oy = Math.cos(angle);
-    while (this.carry >= 1 && this.blocks.length < BlockWater.MAX_BIG) {
-      this.carry--;
-      const a = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * 0.75;
-      const p = new THREE.Vector3(BUCKET.x + ox * 1.05 + Math.cos(a) * rr * Math.abs(oy), BUCKET.y + oy * 1.05 + Math.cos(a) * rr * ox * 0.3, FORT.z + Math.sin(a) * rr);
-      const sp = 1.6 + Math.random() * 1.6;
-      const v = new THREE.Vector3(ox * sp + (Math.random() - 0.5) * 0.6, oy * sp, (Math.random() - 0.5) * 0.9);
-      const spin = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(8);
-      this.blocks.push({ p, v, s: 0.22 + Math.random() * 0.2, spin, r: new THREE.Euler(Math.random() * 3, Math.random() * 3, Math.random() * 3) });
-    }
-    this.carry = Math.min(this.carry, 1);
-  }
-
-  step(dt: number) {
-    const G = 9.8;
-    for (let i = this.blocks.length - 1; i >= 0; i--) {
-      const b = this.blocks[i];
-      b.v.y -= G * dt;
-      b.p.addScaledVector(b.v, dt);
-      b.r.x += b.spin.x * dt; b.r.y += b.spin.y * dt; b.r.z += b.spin.z * dt;
-      const f = this.floor(b.p.x, b.p.z);
-      if (b.p.y - b.s / 2 > f) continue;
-      // Splash! The block breaks into little blocks.
-      this.blocks.splice(i, 1);
-      const n = 6 + Math.floor(Math.random() * 4);
-      for (let k = 0; k < n && this.pieces.length < BlockWater.MAX_BITS; k++) {
-        const a = Math.random() * Math.PI * 2, out = 0.8 + Math.random() * 2.4;
-        this.pieces.push({
-          p: new THREE.Vector3(b.p.x + Math.cos(a) * b.s * 0.3, f + 0.05, b.p.z + Math.sin(a) * b.s * 0.3),
-          v: new THREE.Vector3(Math.cos(a) * out + b.v.x * 0.25, 1 + Math.random() * 2.6, Math.sin(a) * out + b.v.z * 0.25),
-          s: b.s * (0.28 + Math.random() * 0.22), age: 0, life: 0.7 + Math.random() * 0.6, bounced: false,
-          spin: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(14),
-          r: new THREE.Euler(Math.random() * 3, Math.random() * 3, Math.random() * 3),
-        });
-      }
-    }
-    for (let i = this.pieces.length - 1; i >= 0; i--) {
-      const c = this.pieces[i];
-      c.age += dt;
-      if (c.age > c.life) {
-        this.pieces.splice(i, 1);
-        continue;
-      }
-      c.v.y -= G * dt;
-      c.p.addScaledVector(c.v, dt);
-      c.r.x += c.spin.x * dt; c.r.y += c.spin.y * dt; c.r.z += c.spin.z * dt;
-      const f = this.floor(c.p.x, c.p.z);
-      if (c.p.y - c.s / 2 < f && c.v.y < 0) {
-        c.p.y = f + c.s / 2;
-        if (c.bounced) c.v.set(c.v.x * 0.5, 0, c.v.z * 0.5);
-        else c.v.set(c.v.x * 0.6, -c.v.y * 0.3, c.v.z * 0.6);
-        c.bounced = true;
-      }
-    }
-    this.write(this.big, this.blocks.map((b) => [b.p, b.r, b.s] as const));
-    this.write(this.bits, this.pieces.map((c) => [c.p, c.r, c.s * Math.min(1, (c.life - c.age) / 0.35)] as const));
-  }
-
-  private write(im: THREE.InstancedMesh, list: (readonly [THREE.Vector3, THREE.Euler, number])[]) {
-    list.forEach(([p, r, s], i) => {
-      this.q.setFromEuler(r);
-      this.m.compose(p, this.q, this.sc.set(s, s, s));
-      im.setMatrixAt(i, this.m);
-    });
-    im.count = list.length;
-    im.instanceMatrix.needsUpdate = true;
+/** Pour the bucket for `dt` seconds tipped `angle` (radians), `flow` 0..1: big blocks out of the lip. */
+let carry = 0;
+function pour(water: BlockWater, dt: number, angle: number, flow: number) {
+  carry += dt * 90 * flow;
+  // The middle of the bucket's rim, and the way out of it.
+  const ox = Math.sin(angle), oy = Math.cos(angle);
+  while (carry >= 1) {
+    carry--;
+    const a = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * 0.75;
+    const p = new THREE.Vector3(BUCKET.x + ox * 1.05 + Math.cos(a) * rr * Math.abs(oy), BUCKET.y + oy * 1.05 + Math.cos(a) * rr * ox * 0.3, FORT.z + Math.sin(a) * rr);
+    const sp = 1.6 + Math.random() * 1.6;
+    water.throw(p, new THREE.Vector3(ox * sp + (Math.random() - 0.5) * 0.6, oy * sp, (Math.random() - 0.5) * 0.9), 0.22 + Math.random() * 0.2);
   }
 }
 

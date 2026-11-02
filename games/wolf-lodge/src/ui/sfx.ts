@@ -106,6 +106,17 @@ export const sfx = {
     tone(140, 1.6, { to: 70, type: 'sawtooth', vol: 0.1 });
     burst(1.8, 700, 0.2, { to: 200 });
   },
+  /** Old Spitter: the llama hums (llamas hum) and the ground rumbles... */
+  hum: () => {
+    tone(260, 0.45, { to: 330, type: 'triangle', vol: 0.1 });
+    tone(330, 0.7, { to: 240, type: 'triangle', vol: 0.1, at: 0.5 });
+    burst(1.6, 160, 0.25, { to: 90 });
+  },
+  /** ...and the geyser blows. */
+  geyser: () => {
+    burst(3.2, 900, 0.3, { type: 'bandpass', to: 2600 });
+    burst(2.5, 400, 0.25, { to: 150, at: 0.2 });
+  },
   fanfare: () => [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone(f, i === 5 ? 0.7 : 0.18, { type: 'triangle', vol: 0.12, at: i * 0.14 })),
   snore: () => tone(110, 1.2, { to: 90, type: 'sine', vol: 0.05 }),
 };

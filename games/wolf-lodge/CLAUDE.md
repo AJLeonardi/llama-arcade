@@ -25,8 +25,10 @@ Run commands from the repo root; this game's tests: `npx vitest run games/wolf-l
     surface in 2D, exits through `hole` after `passes` swings (funnel) or when it gets there (bowl).
     `frame` = position/forward/up for the view. Lazy river (`loop`) is a current plus steering.
   - `slides.ts`: the rides (`RIDES`), `TOWER`/`DROP_TOWER`, splash pools (`SPLASH`, added by `withPool`),
-    the lazy river line (`RIVER`) and its dip, ride spots (at the tower foot for a quick climb, and on the
-    decks), `TOWER_STAIRS`.
+    the lazy river line (`RIVER`) and its dip, the river's footbridges (`BRIDGES`: a level deck 1.6 m up over
+    the water so tubes float under, smooth ramps `bridgeY` on dry floor, solid slices + railings), Old Spitter
+    on the island (`GEYSER`: rock, round splash basin dip, button spot), `splashFloor` (where splash blocks
+    land), ride spots (at the tower foot for a quick climb, and on the decks), `TOWER_STAIRS`.
   - `stairs.ts`: the towers' walk-up stairs as pieces (flights, landings, deck, lone rails), each with its
     railing sides: `spiralStairs` (Big Tower, round the inside, last flight up the east side through a deck
     hole) and `switchbackStairs` (Wolf Drop, on its north face, clear of the drop). `stairBoxes` makes the
@@ -42,7 +44,12 @@ Run commands from the repo root; this game's tests: `npx vitest run games/wolf-l
     roof trusses, lobby (tree, fireplace, desk, chandeliers), rooms' furniture, ropes-course ropes, park
     furniture (fort + tipping bucket `FORT`, chairs, lifeguard stands, planters), outside (porte-cochère,
     sign, pines, cars). Moving bits: doors, front doors (`setFrontDoors`), fire, runes, the `Dragon`, the
-    bucket's `BlockWater` (instanced blocks that smash into little blocks when they land).
+    tipping bucket. Owns the one `water` (`BlockWater`) everything splashes with.
+  - `water.ts`: `BlockWater`: instanced water blocks that smash into little blocks when they land (bits sink
+    into water, bounce once on the floor). `throw()` one block, `splash(x, y, z, power)` for going into water.
+  - `riverView.ts`: inner tubes floating round the river (some with guests; they steer clear of you), the two
+    docks (decking, sign, stack of tubes), the bridges (extruded side profile, posts and handrails), the
+    basin, rock and bronze llama, and the geyser (`erupt()`: rumble, then blow; also every ~35 s).
   - `slidesView.ts`: tubes/troughs swept along ride paths (level frames), running water (scrolling
     texture), supports, funnels/bowl from their real profiles (lathe), towers, drop capsule + `trapdoor`,
     `pool()`, the river's ribbons.
@@ -51,6 +58,8 @@ Run commands from the repo root; this game's tests: `npx vitest run games/wolf-l
     swing; run blends in), tube, lie (body slides), zip/hang, sleep. `setSwim()`, `tube`, `wand`.
   - `textures.ts`: canvas textures with normal maps (logs, planks, stone, plaster, carpet, tiles, fabric,
     grass, asphalt, water ripples, slide water, signs).
+- Splashes: the player's `splash` event fires when the feet go down through the water's surface
+  (`splashSpeed` sets the size); a slide's end splash and getting into the river splash too.
 - `src/ui/`: `ui.ts` (title, booking cards `OFFERS`, choice menus, HUD, ride panel), `sfx.ts` (own
   AudioContext: noise for steps/splashes, water rush loop `setRush`, park hum), `style.css`.
 - `src/main.ts`: renderer (ACES, PCF shadows following you, `RoomEnvironment` reflections, `Sky`), per-area

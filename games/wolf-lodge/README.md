@@ -15,7 +15,13 @@ Lodge. You arrive in the car park, walk in, and book a room at the front desk.
     then very fast side to side.
   - 🚽 **Flush Bowl:** side to side, round and round a giant toilet bowl, FLUSH, a drop, then straight down.
   - 🌊 **Big Dipper:** a giant open drop into a funnel, up and down, up and down, flushed out into a tube.
-  - 🛟 **Lazy River:** float round and round. Paddle or steer, and get out when you like.
+  - 🛟 **Lazy River:** inner tubes float round in the current, some with guests in them. Go to one of the
+    two docks (the blue LAZY RIVER signs, with a stack of tubes) and press the button to grab a tube and float
+    round and round. Paddle or steer, and get out when you like. Two footbridges cross it to the island.
+  - 🦙 **Old Spitter**, on the island: a giant bronze llama standing on a rock in a splash basin. Push the big
+    red button and the geyser in front of it rumbles and BLOWS (it also goes off by itself now and then).
+  - Jump into any water and it splashes, in blocks like the bucket's water. The higher you jump from, the
+    bigger the splash.
   - The kids' fort with the giant tipping bucket (its water comes out in blocks that smash when they land),
     lifeguards, lounge chairs.
   - Walk up the slide towers' stairs (railings all the way), or press the button at the bottom for a quick

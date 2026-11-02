@@ -13,12 +13,13 @@ import { Controls } from '../../../shared/controls';
 import { Confetti } from '../../../shared/confetti';
 import { Player, STEP } from './sim/player';
 import { Rider, surfH, type RideDef } from './sim/ride';
-import { RIDES, TOWER_RIDES } from './sim/slides';
+import { GEYSER, RIDES, TOWER_RIDES } from './sim/slides';
 import {
-  areaAt, DESK, doorOpen, doors, LOBBY, rayDist, ROOMS, RUNES, spots, START, type Spot, type Tier,
+  areaAt, DESK, doorOpen, doors, LOBBY, rayDist, ROOMS, RUNES, spots, START, WATER_Y, type Spot, type Tier,
 } from './sim/world';
 import { buildLodge, materials, setFrontDoors } from './view/lodge';
 import { Person, PLAYER_LOOK, type Look, type PoseMode } from './view/person';
+import { buildRiver } from './view/riverView';
 import { buildSlides } from './view/slidesView';
 import { setHum, setRush, sfx, unlock } from './ui/sfx';
 import { UI } from './ui/ui';
@@ -98,6 +99,8 @@ const lodge = buildLodge(mats);
 scene.add(lodge.group);
 const slides = buildSlides(mats.wood, mats.roof, mats.poolTile, mats.water, mats.coping);
 scene.add(slides.group);
+const river = buildRiver(mats, lodge.water);
+scene.add(river.group);
 const confetti = new Confetti(scene);
 if (save.dragon) lodge.dragon.wake();
 
@@ -230,6 +233,7 @@ function startRide(def: RideDef) {
   me.setTube(def.seat === 'tube');
   me.setSwim(def.id !== 'zip');
   setMode('ride');
+  ui.setAction(null);
   ui.toast(`${def.emoji} ${def.name}: ${def.blurb}`, 4);
   slides.trapdoor.rotation.x = 0;
   camReady = false;
@@ -396,6 +400,14 @@ function doAction() {
       if (!save.tier) return needBand();
       sfx.splash(false);
       startRide(RIDES[s.ride!]);
+      lodge.water.splash(rider!.frame.pos[0], WATER_Y, rider!.frame.pos[2], 0.4);
+      break;
+    case 'geyser':
+      if (river.busy) ui.toast('🦙 Here it comes!', 1.5);
+      else {
+        sfx.click();
+        river.erupt();
+      }
       break;
     case 'zip':
       sfx.whoosh();
@@ -599,8 +611,11 @@ function frame(nowMs: number) {
       else if (e === 'jump') sfx.jump();
       else if (e === 'land') sfx.land();
       else if (e === 'bounce') sfx.bounce();
-      else if (e === 'splash') sfx.splash(false);
-      else if (e === 'harness') {
+      else if (e === 'splash') {
+        // Jumped (or stepped) into the water: a splash the size of how hard you went in.
+        sfx.splash(player.splashSpeed > 4);
+        lodge.water.splash(player.x, WATER_Y, player.z, player.splashSpeed / 6);
+      } else if (e === 'harness') {
         sfx.harness();
         ui.toast('🧗 The harness caught you!', 2);
       }
@@ -643,7 +658,10 @@ function frame(nowMs: number) {
       else if (e === 'flush') {
         sfx.flush();
         ui.toast('🚽 FLUSH!', 1.4);
-      } else if (e === 'splash') sfx.splash(true);
+      } else if (e === 'splash') {
+        sfx.splash(true);
+        lodge.water.splash(rider.frame.pos[0], WATER_Y, rider.frame.pos[2], 1);
+      }
     }
     rider.events.length = 0;
     if (rider.def.countdown && rider.wait > 0 && rider.wait < 3.99 && !ui.root.querySelector('.big-text:not(.hidden)')) ui.bigText(`${Math.ceil(rider.wait)}`);
@@ -692,6 +710,12 @@ function frame(nowMs: number) {
   sun.position.copy(focus).addScaledVector(SUN_DIR, 90);
   lodge.animate(dt, clock);
   slides.animate(dt);
+  const floating = mode === 'ride' && rider?.def.loop ? ([rider.frame.pos[0], rider.frame.pos[2]] as [number, number]) : null;
+  const geyser = river.animate(dt, clock, floating);
+  if (geyser && Math.hypot(me.root.position.x - GEYSER.x, me.root.position.z - GEYSER.z) < 30) {
+    if (geyser === 'rumble') sfx.hum();
+    else sfx.geyser();
+  }
   confetti.update(dt);
   for (const [i, r] of lodge.runes.entries()) {
     const m = r.material as THREE.MeshStandardMaterial;
