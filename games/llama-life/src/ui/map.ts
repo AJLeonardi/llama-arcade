@@ -1,5 +1,6 @@
 // The map: a round mini-map that turns with you (tap it for the big one), and the big map of the whole town
-// with buttons to go straight to a place. Both are drawn from the world data onto one picture made at the start.
+// with buttons to pick where to go: the GPS then draws the way there as a blue line on both maps. Both are drawn from the world data onto one picture made at the start.
+import type { Pt } from '../sim/route';
 import { BOUNDS, houses, paved, PLACES, POOL, roads, towers, trees, venues, type Place } from '../sim/world';
 
 const PX = 1.6; // picture pixels per metre
@@ -40,11 +41,15 @@ export class TownMap {
   private town = drawTown();
   private big = document.createElement('canvas');
   private me = { x: 0, z: 0, heading: 0 };
+  private way: Pt[] = [];
+  private dest: Place | null = null;
+  private placeBtns: HTMLButtonElement[] = [];
+  private stopBtn = document.createElement('button');
 
   constructor(
     open: () => void,
     close: () => void,
-    go: (p: Place) => void,
+    go: (p: Place | null) => void,
   ) {
     this.mini.className = 'minimap';
     this.mini.width = this.mini.height = 300;
@@ -56,15 +61,22 @@ export class TownMap {
     const side = document.createElement('div');
     side.className = 'map-side';
     const h = document.createElement('h2');
-    h.textContent = 'Go to…';
-    side.append(h);
+    h.textContent = 'Where to?';
+    const list = document.createElement('div');
+    list.className = 'place-list';
+    side.append(h, list);
     for (const p of PLACES) {
       const b = document.createElement('button');
       b.className = 'place';
       b.textContent = `${p.icon}  ${p.name}`;
       b.onclick = () => go(p);
-      side.append(b);
+      list.append(b);
+      this.placeBtns.push(b);
     }
+    this.stopBtn.className = 'place stop';
+    this.stopBtn.textContent = '✕  Stop the GPS';
+    this.stopBtn.onclick = () => go(null);
+    list.append(this.stopBtn);
     const x = document.createElement('button');
     x.className = 'big';
     x.textContent = '✓  Close';
@@ -72,6 +84,26 @@ export class TownMap {
     side.append(x);
     this.big.className = 'bigmap';
     this.screen.append(this.big, side);
+  }
+
+  /** The GPS's way to draw (empty for none) and where it goes. */
+  setRoute(way: Pt[], dest: Place | null) {
+    this.way = way;
+    this.dest = dest;
+    PLACES.forEach((p, i) => this.placeBtns[i].classList.toggle('on', p === dest));
+    this.stopBtn.classList.toggle('hidden', !dest);
+  }
+
+  private line(g: CanvasRenderingContext2D, k: number, width: number) {
+    if (this.way.length < 2) return;
+    g.lineJoin = g.lineCap = 'round';
+    for (const [color, w] of [['rgba(255,255,255,0.9)', width * 1.6], ['#1e88ff', width]] as const) {
+      g.strokeStyle = color;
+      g.lineWidth = w;
+      g.beginPath();
+      this.way.forEach((p, i) => (i ? g.lineTo(mx(p.x) * k, mz(p.z) * k) : g.moveTo(mx(p.x) * k, mz(p.z) * k)));
+      g.stroke();
+    }
   }
 
   /** Draws the mini-map: 220 m across, turned so the way you face is up. */
@@ -92,6 +124,8 @@ export class TownMap {
     g.rotate(camYaw - Math.PI);
     g.scale(k, k);
     g.drawImage(this.town, -mx(x), -mz(z));
+    g.translate(-mx(x), -mz(z));
+    this.line(g, 1, 9 / k);
     g.restore();
     this.places(g, x, z, camYaw, S, k);
     // You, an arrow in the middle, pointing the way you face relative to the camera.
@@ -119,6 +153,16 @@ export class TownMap {
       let sx = dx * ca - dz * sa, sy = dx * sa + dz * ca;
       const d = Math.hypot(sx, sy), max = R - 26;
       if (d > max) (sx *= max / d), (sy *= max / d);
+      if (p === this.dest) {
+        // Where the GPS goes: a bright ring behind the icon.
+        g.fillStyle = '#1e88ff';
+        g.strokeStyle = '#fff';
+        g.lineWidth = 4;
+        g.beginPath();
+        g.arc(R + sx, R + sy, 25, 0, Math.PI * 2);
+        g.fill();
+        g.stroke();
+      }
       g.fillText(p.icon, R + sx, R + sy);
     }
   }
@@ -139,9 +183,10 @@ export class TownMap {
 
   /** Draws the big map (north up) when it opens. */
   opened() {
-    const avail = Math.min(window.innerHeight - 24, (window.innerWidth - 260) * (H / W));
+    const side = window.innerHeight < 500 ? 220 : 260;
+    const avail = Math.min(window.innerHeight - 24, (window.innerWidth - side - 40) * (H / W));
     const scale = Math.min(window.devicePixelRatio || 1, 2);
-    const h = Math.max(200, avail), w = (h * W) / H;
+    const h = Math.max(150, avail), w = (h * W) / H;
     this.big.width = w * scale;
     this.big.height = h * scale;
     this.big.style.width = `${w}px`;
@@ -149,6 +194,7 @@ export class TownMap {
     const g = this.big.getContext('2d')!;
     const k = this.big.width / W;
     g.drawImage(this.town, 0, 0, this.big.width, this.big.height);
+    this.line(g, k, 5 * scale);
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.font = `${26 * scale}px system-ui`;

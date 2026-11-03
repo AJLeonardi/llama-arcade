@@ -18,7 +18,10 @@ Its look (textures, trees, the person's limbs) started as copies of 3D Skate's c
     list: a spot on foot and one for your car), `CAR_SPOTS` (your cars, in front of the mansion), `POOL`.
     Collision: `solids` (boxes) in a 16 m grid, `pushOut(p, r, car)` pushes a circle out. `low` boxes stop
     cars but not people: the pool edge and invisible blockers in every doorway, so cars can't drive inside.
-  - `walker.ts`: you on foot. Camera-relative stick, run past 0.75, jump, swim (slower) in the pool.
+  - `walker.ts`: you on foot. Camera-relative stick, run past 0.75, jump, swim (slower) in the pool. You can
+    land on furniture (`groundUnder`), so you never end up inside a box (pushOut would shove you through a wall).
+  - `route.ts`: the GPS. Roads on a 4 m grid; `new Route(place)` fills in distances from the place (BFS),
+    `from(x, z)` walks downhill to it and returns the corner points.
   - `car.ts`: `CAR_TYPES` (size, side outline `body`/`cabin`, wheels, seat, top speed) and `Car` (bicycle-model
     steering, less lock at speed; a row of circles for bumping: head-on bounces, scraping slows).
   - `clock.ts`: hour/day, `HOUR_SECS` (30 s per game hour), night is 7:30 PM to 6 AM, `sleep()` → 7 AM,
@@ -42,15 +45,21 @@ Its look (textures, trees, the person's limbs) started as copies of 3D Skate's c
   - `textures.ts`, `trees.ts`, `geo.ts`: copied from 3D Skate; `Geo` has vertex colours (`tint()`), textures
     add grass, house walls (with a lit-window map), shingles, tiles, water.
 - `src/ui/`: `ui.ts` (title, "me" maker, pause, bag, HUD, action button, pop-ups, `fade()`), `map.ts`
-  (`TownMap`: round heading-up mini-map, big map with go-to buttons, both from one picture of the town),
+  (`TownMap`: round heading-up mini-map, big map with "Where to?" buttons that set the GPS, both from one
+  picture of the town, and the GPS's blue line on both),
   `sfx.ts` (own AudioContext: engine hum, horn, take, yum, bell, lullaby…), `style.css`.
 - `src/main.ts`: renderer, the loop (60 Hz sim), on foot vs `driving` (an index into `cars`), the action
   button (`currentAction`/`doSpot`), `busy()` for things that take time (fade, clock moves on), the camera
   (follows behind; walks out toward the camera and stops before walls; inside a building it stays under
-  the ceiling and inside the walls), the room light and headlights, saving (`gameStorage('llama-life')`,
+  the ceiling and inside the walls), the room light and headlights, the GPS (`setDestination`, the beam,
+`updateRoute` twice a second, arriving), `fit()` every frame from the canvas's own size (iPhone rotation), saving (`gameStorage('llama-life')`,
   key `save`). `window.__life` has `life()`, `me`, `cars()`, `camera`, `renderer`, `town`, `scene`.
 
 ## Notes
+
+- Phones on their side are under 500 px tall: `style.css` has a `max-height: 500px` block that shrinks the
+  HUD and screens. Check new screens at 844×390.
+- Paving that overlaps the pool is drawn around it (it once covered the water and looked like concrete).
 
 - Draw calls at the mansion are ~300 with ~260k triangles (shadow pass included). Parked cars use the
   `low` car parts (plain wheels) because they were most of the triangles.

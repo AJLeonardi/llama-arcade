@@ -18,6 +18,7 @@ import { CarModel } from './view/carModel';
 import { NPC_LOOKS, Person } from './view/person';
 import { UI, type Screen } from './ui/ui';
 import { TownMap } from './ui/map';
+import { length, Route } from './sim/route';
 import { engineSound, sfx, unlock } from './ui/sfx';
 
 // ---------------------------------------------------------------- saving
@@ -38,12 +39,17 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 2200);
+// Sized from the canvas itself, checked every frame: on the iPhone the resize event can come before the new
+// size when it turns, which squashed the picture.
+let fitW = 0, fitH = 0;
 function fit() {
-  renderer.setSize(window.innerWidth, window.innerHeight, false);
-  camera.aspect = window.innerWidth / window.innerHeight;
+  const w = canvas.clientWidth || window.innerWidth, h = canvas.clientHeight || window.innerHeight;
+  if (w === fitW && h === fitH) return;
+  (fitW = w), (fitH = h);
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
-window.addEventListener('resize', fit);
 fit();
 
 const sky = new DayNight(scene, renderer);
@@ -149,7 +155,11 @@ let started = false;
 const map = new TownMap(
   () => setMode('map'),
   () => setMode('play'),
-  (p) => goTo(p),
+  (p) => {
+    setDestination(p);
+    setMode('play');
+    if (p) ui.popup(`${p.icon} ${p.name}`, 'Follow the blue line!');
+  },
 );
 ui.hudAppend(map.mini);
 ui.add('map', map.screen);
@@ -339,25 +349,44 @@ function busy(text: string, run: () => void, hold = 1600, lie = false) {
   }, lie ? 1400 : 0);
 }
 
-/** The big map's buttons: go straight there (in your car if you're driving). */
-function goTo(p: Place) {
-  setMode('busy');
-  ui.fade(`${p.icon} Going to ${p.name}…`, () => {
-    if (driving >= 0) {
-      const c = cars[driving];
-      c.x = p.cx;
-      c.z = p.cz;
-      c.heading = p.ch;
-      c.speed = 0;
-      camYaw = p.ch;
-    } else {
-      me.placeAt(p.x, p.z, p.heading);
-      camYaw = p.heading;
-    }
-    camPos.set(0, 0, 0);
-    pass(life, 0.25);
-    setTimeout(() => mode === 'busy' && setMode('play'), 600);
-  }, 600);
+// ---------------------------------------------------------------- the GPS
+
+/** The big map's buttons: the GPS shows the way (a blue line on the map, a beam of light at the place). */
+let route: Route | null = null;
+let routeTimer = 0;
+const beam = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.6, 2.4, 120, 20, 1, true).translate(0, 60, 0),
+  new THREE.MeshBasicMaterial({ color: 0x0a62ff, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false, fog: false, toneMapped: false }),
+);
+beam.visible = false;
+scene.add(beam);
+
+function setDestination(p: Place | null) {
+  route = p ? new Route(p) : null;
+  routeTimer = 0;
+  beam.visible = !!p;
+  if (p) beam.position.set(p.x, 0, p.z);
+  updateRoute();
+}
+
+function updateRoute() {
+  const at = driving >= 0 ? cars[driving] : me;
+  if (!route) {
+    map.setRoute([], null);
+    ui.setGps('');
+    return;
+  }
+  const p = route.place;
+  if (Math.hypot(at.x - p.x, at.z - p.z) < 12 || Math.hypot(at.x - p.cx, at.z - p.cz) < 6) {
+    ui.popup(`${p.icon} You're at ${p.name}!`);
+    sfx.bell();
+    setDestination(null);
+    return;
+  }
+  const way = route.from(at.x, at.z);
+  map.setRoute(way, p);
+  const m = length(way);
+  ui.setGps(`${p.icon} ${p.name} · ${m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`}`);
 }
 
 // ---------------------------------------------------------------- camera
@@ -480,6 +509,7 @@ function frame(now: number) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
+  fit();
   const car = driving >= 0 ? cars[driving] : null;
   let moving = false;
   if (mode === 'play') {
@@ -499,7 +529,7 @@ function frame(now: number) {
         prev.set(me.x, me.y, me.z);
         const before = me.y;
         me.step(mv.x, mv.y, camYaw, jump, STEP);
-        if (me.y > before && before === 0) sfx.jump();
+        if (me.y > before && before <= me.ground + 0.01) sfx.jump();
       }
     }
     // The camera only swings round behind you when you walk forward (not back toward it).
@@ -540,7 +570,7 @@ function frame(now: number) {
     shown.set(me.x, me.y + swimY, me.z);
     person.root.position.copy(shown);
     person.root.rotation.y = me.heading;
-    person.pose(me.y > 0.05 ? 'air' : me.swimming ? 'swim' : 'stand', mode === 'play' || mode === 'busy' ? me.speed : 0, dt);
+    person.pose(me.y > me.ground + 0.05 ? 'air' : me.swimming ? 'swim' : 'stand', mode === 'play' || mode === 'busy' ? me.speed : 0, dt);
   }
   for (let i = 0; i < people.length; i++) {
     const n = npcs[i], p = people[i];
@@ -567,6 +597,9 @@ function frame(now: number) {
 
   const heading = car ? car.heading : me.heading;
   updateCamera(dt, shown, heading, moving);
+  routeTimer -= dt;
+  if (route && routeTimer <= 0 && (mode === 'play' || mode === 'busy')) (routeTimer = 0.4), updateRoute();
+  if (beam.visible) (beam.material as THREE.MeshBasicMaterial).opacity = 0.5 + 0.15 * Math.sin(now / 300);
   map.update(shown.x, shown.z, heading, camYaw + orbitYaw);
   renderer.render(scene, camera);
 }
@@ -578,4 +611,4 @@ if (at) me.placeAt(at.x, at.z, at.heading);
 requestAnimationFrame(frame);
 startPwa({ onUpdate: () => (mode === 'title' ? reloadForUpdate() : ui.offerUpdate()) });
 
-(window as unknown as { __life: unknown }).__life = { life: () => life, me, cars: () => cars, camera, renderer, town, BUILD, scene };
+(window as unknown as { __life: unknown }).__life = { life: () => life, me, cars: () => cars, camera, renderer, town, BUILD, scene, setDestination, look: (yaw: number) => ((camYaw = yaw), (orbitYaw = 0)) };

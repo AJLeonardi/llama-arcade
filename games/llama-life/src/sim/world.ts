@@ -686,6 +686,19 @@ export function solidsNear(x: number, z: number, r: number): Box[] {
  * `head` is how high the circle reaches (things lifted above it, like the tower over a lobby, don't count).
  * Returns how far it was pushed, or 0.
  */
+/**
+ * How high the thing under you is (0 for the ground): the top of a bed, table or car you've jumped onto.
+ * Only things whose top is below your feet (plus a little) count, so a wall you walk into isn't a floor.
+ */
+export function groundUnder(x: number, z: number, feet: number, r = 0.2): number {
+  let top = 0;
+  for (const b of solidsNear(x, z, r)) {
+    if (b.low || b.y1 > feet + 0.05 || b.y1 <= top) continue;
+    if (x > b.x0 - r && x < b.x1 + r && z > b.z0 - r && z < b.z1 + r) top = b.y1;
+  }
+  return top;
+}
+
 export function pushOut(p: { x: number; z: number }, r: number, car: boolean, feet = 0): number {
   let moved = 0;
   for (let pass = 0; pass < 3; pass++) {

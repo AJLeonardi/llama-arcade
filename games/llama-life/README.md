@@ -22,8 +22,9 @@ morning.
 
 **Your bag** 🛍️ holds 12 things. Tap it, then tap something to eat or drink it.
 
-**Map:** the round map turns with you. Tap it (or press M) for the big map, with buttons to go straight to
-any place (in your car, if you're driving).
+**Map and GPS:** the round map turns with you. Tap it (or press M) for the big map and pick where you want
+to go: a blue line shows the way along the roads, a blue beam of light shines over the place, and the top of
+the screen says how far it is. Drive (or walk) there; the GPS turns off when you arrive.
 
 ## How to play
 

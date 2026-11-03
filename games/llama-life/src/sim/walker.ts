@@ -1,5 +1,5 @@
 // You, on foot: walk or run where the stick points (relative to the camera), jump, swim in the pool.
-import { inPool, pushOut } from './world';
+import { groundUnder, inPool, pushOut } from './world';
 
 export const WALK_SPEED = 2.2;
 export const RUN_SPEED = 6;
@@ -10,8 +10,10 @@ const JUMP_V = 6.2;
 export class Walker {
   x: number;
   z: number;
-  /** Feet height above the ground (jumping). */
+  /** Feet height above the ground (jumping, or standing on a bed or table). */
   y = 0;
+  /** The height of what you're standing on (0 is the ground). */
+  ground = 0;
   vy = 0;
   heading: number;
   /** How fast we're actually moving (m/s), for the walk animation. */
@@ -28,7 +30,7 @@ export class Walker {
     this.x = x;
     this.z = z;
     this.heading = heading;
-    this.y = this.vy = this.speed = 0;
+    this.y = this.vy = this.speed = this.ground = 0;
   }
 
   /**
@@ -54,12 +56,14 @@ export class Walker {
     this.speed += (want - this.speed) * Math.min(1, dt * 10);
     this.x += Math.sin(this.heading) * this.speed * dt;
     this.z += Math.cos(this.heading) * this.speed * dt;
-    // Jumping (not while swimming).
-    if (jump && this.y === 0 && !this.swimming) this.vy = JUMP_V;
-    if (this.y > 0 || this.vy > 0) {
+    // Jumping (not while swimming). You land on top of things (a bed, a table), and walking off the edge
+    // drops you down, so you never end up inside furniture (which used to push you out through a wall).
+    this.ground = groundUnder(this.x, this.z, this.y);
+    if (jump && this.y === this.ground && !this.swimming) this.vy = JUMP_V;
+    if (this.y > this.ground || this.vy > 0) {
       this.vy -= GRAVITY * dt;
-      this.y = Math.max(0, this.y + this.vy * dt);
-      if (this.y === 0) this.vy = 0;
+      this.y = Math.max(this.ground, this.y + this.vy * dt);
+      if (this.y === this.ground) this.vy = 0;
     }
     pushOut(this, RADIUS, false, this.y);
   }

@@ -39,6 +39,7 @@ export class UI {
   private actionBtn = el('button', 'action-btn hidden');
   private popupEl = el('div', 'popup');
   private hint = el('div', 'hint');
+  private gps = el('div', 'pill gps hidden');
   private fadeEl = el('div', 'fade');
   private fadeText = el('div', 'fade-text');
   private updateBtn = el('button', 'update hidden', '✨ New version! Tap to get it');
@@ -65,7 +66,7 @@ export class UI {
     };
     this.jumpBtn.onpointerdown = (e) => e.stopPropagation();
     this.updateBtn.onclick = () => act.update();
-    this.hud.append(this.clock, pause, this.bagBtn, this.actionBtn, this.jumpBtn, this.hint, this.updateBtn);
+    this.hud.append(this.clock, this.gps, pause, this.bagBtn, this.actionBtn, this.jumpBtn, this.hint, this.updateBtn);
     this.surface.append(this.hud);
     this.root.append(this.popupEl);
     this.fadeEl.append(this.fadeText);
@@ -196,6 +197,12 @@ export class UI {
 
   setLook(l: Look) {
     this.lookState = { ...l };
+  }
+
+  /** Where the GPS is taking you and how far (empty hides it). */
+  setGps(text: string) {
+    if (this.gps.textContent !== text) this.gps.textContent = text;
+    this.gps.classList.toggle('hidden', !text);
   }
 
   setClock(text: string, night: boolean) {

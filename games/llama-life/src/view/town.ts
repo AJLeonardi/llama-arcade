@@ -215,7 +215,13 @@ export class Town {
       const y = p.kind === 'sidewalk' ? 0.06 : p.kind === 'parking' || p.kind === 'court' ? 0.025 : p.kind === 'field' ? 0.008 : 0.035;
       const mat: MatKey = p.kind === 'parking' || p.kind === 'court' ? 'asphalt' : p.kind === 'field' ? 'field' : 'concrete';
       const color = p.kind === 'court' ? '#5f8f6a' : p.kind === 'plaza' ? '#e6e0d4' : p.kind === 'drive' ? '#d9d4c8' : '#ffffff';
-      this.flat(mat, p.x0, p.x1, p.z0, p.z1, y, mat === 'asphalt' ? 8 : 4, color);
+      // Paving round the pool leaves the pool open (it used to cover the water, so it looked like concrete).
+      const P = POOL;
+      const overPool = p.x0 < P.x1 && p.x1 > P.x0 && p.z0 < P.z1 && p.z1 > P.z0;
+      const rects = overPool
+        ? [[p.x0, P.x0, p.z0, p.z1], [P.x1, p.x1, p.z0, p.z1], [P.x0, P.x1, p.z0, P.z0], [P.x0, P.x1, P.z1, p.z1]]
+        : [[p.x0, p.x1, p.z0, p.z1]];
+      for (const [x0, x1, z0, z1] of rects) if (x1 > x0 && z1 > z0) this.flat(mat, x0, x1, z0, z1, y, mat === 'asphalt' ? 8 : 4, color);
       if (p.kind === 'sidewalk') {
         // The kerb's sides.
         const g = this.geo('concrete', (p.x0 + p.x1) / 2, (p.z0 + p.z1) / 2).tint('#cfcac0');

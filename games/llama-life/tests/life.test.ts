@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { blocked, CAR_SPOTS, MANSION, onRoad, PLACES, solids, spotAt, venueAt, venues } from '../src/sim/world';
 import { Walker } from '../src/sim/walker';
 import { Car, CAR_TYPES, REWARD_CARS } from '../src/sim/car';
+import { length, Route } from '../src/sim/route';
 import { daylight, isNight, sleep, tick, HOUR_SECS } from '../src/sim/clock';
 import { BAG_MAX, doWork, fromSave, newLife, ownedCars, take } from '../src/sim/life';
 
@@ -50,6 +51,22 @@ describe('the town', () => {
     }
   });
 
+  test('jumping on the bed and walking into the wall behind it keeps you inside', () => {
+    // The bed is against the bedroom's east wall. You used to land inside the bed and get pushed out
+    // through the wall.
+    const EAST = Math.PI / 2;
+    const w = new Walker(23.6, 539, EAST);
+    for (let t = 0; t < 4; t += STEP) w.step(0, 1, EAST, true, STEP);
+    for (let t = 0; t < 1; t += STEP) w.step(0, 1, EAST, false, STEP);
+    expect(w.x).toBeLessThan(MANSION.x1);
+    expect(venueAt(w.x, w.z)?.id).toBe('home');
+    // Standing on it, then walking off the other side back to the floor.
+    expect(w.y).toBeCloseTo(0.62, 1);
+    for (let t = 0; t < 3; t += STEP) w.step(0, 1, -EAST, false, STEP);
+    expect(w.y).toBe(0);
+    expect(w.x).toBeLessThan(24.6);
+  });
+
   test('a car does not fit through a door', () => {
     const c = new Car(0, 0, 515, Math.PI);
     c.heading = 0; // facing the mansion's front door, south
@@ -65,6 +82,22 @@ describe('the town', () => {
       expect(blocked(x, z, 1.2, true), `${x}, ${z}`).toBe(false);
     }
     expect(solids.length).toBeGreaterThan(100);
+  });
+});
+
+describe('the GPS', () => {
+  test('there is a way along the roads from home to every place', () => {
+    const home = PLACES.find((p) => p.id === 'home')!;
+    for (const p of PLACES) {
+      if (p === home) continue;
+      const way = new Route(p).from(home.cx, home.cz);
+      const end = way[way.length - 1];
+      expect([end.x, end.z], p.name).toEqual([p.x, p.z]);
+      // Every point but the last two (the car spot and the door) is on a road.
+      for (const q of way.slice(1, -2)) expect(onRoad(q.x, q.z), `${p.name} at ${q.x}, ${q.z}`).toBe(true);
+      // Not a crazy detour: less than twice as far as a straight line plus the blocks around it.
+      expect(length(way), p.name).toBeLessThan(Math.hypot(p.x - home.x, p.z - home.z) * 1.6 + 200);
+    }
   });
 });
 
