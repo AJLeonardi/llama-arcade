@@ -13,7 +13,8 @@ one deploy (GitHub Pages).
   rules every game follows.
 - **Each game has its own `CLAUDE.md`** (`games/drive/CLAUDE.md`, `games/rocket/CLAUDE.md`,
   `games/blox/CLAUDE.md`, `games/speed-run-am/CLAUDE.md`, `games/3d-skate/CLAUDE.md`,
-  `games/wolf-lodge/CLAUDE.md`, `games/baseball-3d/CLAUDE.md`, `games/llama-life/CLAUDE.md`). When working on one game, read only that game's folder (plus `shared/` if it
+  `games/wolf-lodge/CLAUDE.md`, `games/baseball-3d/CLAUDE.md`, `games/llama-life/CLAUDE.md`,
+  `games/planet-smash/CLAUDE.md`). When working on one game, read only that game's folder (plus `shared/` if it
   uses something from there).
 
 ## Commands

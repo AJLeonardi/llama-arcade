@@ -1,0 +1,172 @@
+html, body {
+  margin: 0; height: 100%; background: #000004; overflow: hidden; touch-action: none;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  font-family: 'Avenir Next', 'Helvetica Neue', system-ui, sans-serif; color: #fff;
+}
+canvas#game { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
+button { font: inherit; color: inherit; border: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; background: none; }
+.hidden { display: none !important; }
+#ui { position: fixed; inset: 0; pointer-events: none; }
+#ui > * { pointer-events: auto; }
+.hud { position: absolute; inset: 0; pointer-events: none !important; }
+.hud > * { pointer-events: auto; }
+
+.screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.big-title {
+  font-size: clamp(54px, 13vw, 140px); font-weight: 900; line-height: 0.9; text-align: center; letter-spacing: 4px;
+  background: linear-gradient(180deg, #fff 0%, #ffd27a 45%, #ff5a1f 75%, #a01010 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 30px rgba(255, 100, 30, 0.5));
+}
+.sub { margin-top: 14px; font-size: 22px; opacity: 0.85; text-shadow: 0 2px 8px #000; text-align: center; padding: 0 20px; }
+.loading { background: #000004; }
+.title { background: radial-gradient(ellipse at center, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 100%); }
+.play-btn {
+  margin-top: 36px; padding: 18px 70px; border-radius: 40px; font-size: 40px; font-weight: 900;
+  background: linear-gradient(180deg, #ff7a2e, #d42a10); box-shadow: 0 0 40px rgba(255, 90, 30, 0.6), inset 0 2px 0 rgba(255,255,255,0.4);
+}
+.play-btn:active, .done-btn:active, .card:active, .weapon:active, .cam-btn:active { transform: scale(0.95); }
+.corner-btn {
+  position: absolute; top: max(12px, env(safe-area-inset-top)); padding: 12px 18px; border-radius: 16px;
+  background: rgba(20, 24, 40, 0.65); font-size: 20px; font-weight: 800; border: 1px solid rgba(255,255,255,0.15);
+}
+.corner-btn.left { left: max(14px, env(safe-area-inset-left)); }
+.build { position: absolute; right: 8px; bottom: 6px; font-size: 11px; opacity: 0.4; pointer-events: none !important; }
+.update-btn {
+  position: absolute; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  padding: 10px 18px; border-radius: 14px; background: #ffe066; color: #222; font-weight: 800; font-size: 18px; z-index: 5;
+}
+
+/* choosing a planet */
+.pick { background: rgba(0, 0, 8, 0.55); justify-content: flex-start; }
+.pick-head { display: flex; align-items: center; gap: 16px; margin-top: max(14px, env(safe-area-inset-top)); }
+.pick-head h1 { margin: 0; font-size: 34px; font-weight: 900; text-shadow: 0 2px 10px #000; }
+.back-btn { width: 54px; height: 54px; border-radius: 16px; background: rgba(20, 24, 40, 0.7); font-size: 28px; font-weight: 900; }
+.tabs {
+  position: absolute; left: max(14px, env(safe-area-inset-left)); top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 14px;
+}
+.tab {
+  width: 128px; padding: 14px 8px; border-radius: 18px; background: rgba(30, 34, 60, 0.75); font-size: 34px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; border: 2px solid transparent;
+}
+.tab span { font-size: 16px; font-weight: 800; line-height: 1.15; }
+.tab.on { border-color: #ffb347; background: rgba(120, 50, 20, 0.8); box-shadow: 0 0 20px rgba(255, 140, 50, 0.5); }
+.cards {
+  flex: 1; display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 18px 26px;
+  padding: 10px 20px 20px 170px; max-width: 1100px; overflow-y: auto; touch-action: pan-y;
+}
+.card {
+  position: relative; width: 170px; display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 14px 6px; border-radius: 22px; background: rgba(15, 18, 35, 0.6); border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.ball {
+  width: 120px; height: 120px; border-radius: 50%; background-size: 200% 100%; background-position: 0 0;
+  box-shadow: inset -22px -14px 40px rgba(0, 0, 0, 0.85), inset 6px 4px 18px rgba(255, 255, 255, 0.15), 0 0 18px rgba(120, 160, 255, 0.25);
+  animation: turn 30s linear infinite;
+}
+.ball.star { box-shadow: inset 0 0 26px rgba(120, 20, 0, 0.6), 0 0 34px rgba(255, 150, 40, 0.8); }
+.card.giant .ball { width: 150px; height: 150px; box-shadow: inset 0 0 30px rgba(90, 0, 0, 0.7), 0 0 50px rgba(255, 70, 30, 0.9); }
+.ring {
+  position: absolute; top: 58px; left: 50%; width: 200px; height: 40px; margin-left: -100px; border-radius: 50%;
+  border: 7px solid rgba(220, 200, 160, 0.75); transform: rotate(-12deg); pointer-events: none;
+}
+@keyframes turn { from { background-position: 0 0; } to { background-position: -200% 0; } }
+.card .name { font-size: 19px; font-weight: 800; text-align: center; }
+.badge { position: absolute; top: 8px; right: 8px; font-size: 14px; font-weight: 800; background: rgba(200, 40, 20, 0.85); padding: 2px 8px; border-radius: 10px; }
+
+/* smashing */
+.name-box {
+  position: absolute; left: 50%; transform: translateX(-50%); top: max(10px, env(safe-area-inset-top));
+  text-align: center; pointer-events: none !important; max-width: 50vw;
+}
+.name-box .nm { font-size: 30px; font-weight: 900; text-shadow: 0 2px 10px #000; }
+.name-box .fact { font-size: 15px; opacity: 0.85; text-shadow: 0 2px 6px #000; }
+.meter {
+  position: absolute; left: max(14px, env(safe-area-inset-left)); top: calc(max(12px, env(safe-area-inset-top)) + 64px);
+  padding: 10px 14px; border-radius: 14px; background: rgba(10, 12, 25, 0.7); font-size: 17px; font-weight: 700;
+  font-variant-numeric: tabular-nums; pointer-events: none !important; border: 1px solid rgba(255,255,255,0.12);
+}
+.meter { width: 190px; }
+.meter .bar { margin-top: 6px; height: 18px; border-radius: 9px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.meter .fill { height: 100%; width: 100%; border-radius: 9px; box-shadow: 0 0 10px currentColor; }
+.meter .pct { margin-top: 4px; font-size: 22px; font-weight: 900; }
+.hint {
+  position: absolute; bottom: max(24px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+  font-size: 20px; font-weight: 700; opacity: 0.85; text-shadow: 0 2px 8px #000; pointer-events: none !important; white-space: nowrap;
+}
+.cam-btn {
+  position: absolute; left: max(14px, env(safe-area-inset-left)); bottom: max(14px, env(safe-area-inset-bottom));
+  width: 74px; height: 74px; border-radius: 50%; background: rgba(20, 24, 40, 0.75); font-size: 38px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+}
+.weapons {
+  position: absolute; right: max(10px, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%);
+  display: grid; grid-auto-flow: column; grid-template-rows: repeat(9, auto); gap: 6px;
+}
+.weapon {
+  position: relative; display: flex; align-items: center; gap: 8px; width: 168px; height: 64px; padding: 0 10px;
+  border-radius: 16px; background: rgba(20, 24, 45, 0.75); border: 2px solid rgba(255, 255, 255, 0.12); text-align: left;
+}
+.weapon .em { font-size: 32px; }
+.weapon .wn { font-size: 16px; font-weight: 800; line-height: 1.1; }
+.weapon .key { position: absolute; right: 6px; bottom: 3px; font-size: 10px; opacity: 0.35; }
+.weapon.on { border-color: #ffb347; background: rgba(140, 50, 15, 0.85); box-shadow: 0 0 18px rgba(255, 140, 50, 0.6); }
+.toast {
+  position: absolute; left: 50%; top: 42%; transform: translateX(-50%); padding: 14px 22px; border-radius: 18px;
+  background: rgba(20, 10, 40, 0.85); border: 2px solid #ff8de0; font-size: 22px; font-weight: 800; text-align: center;
+  pointer-events: none !important; max-width: 70vw;
+}
+.done {
+  position: absolute; left: 50%; bottom: max(20px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; max-width: 70vw;
+}
+.done-title { width: 100%; text-align: center; font-size: 40px; font-weight: 900; text-shadow: 0 0 20px #ff5a1f, 0 2px 6px #000; }
+.done-btn {
+  padding: 14px 22px; border-radius: 18px; font-size: 20px; font-weight: 800;
+  background: rgba(30, 34, 70, 0.85); border: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+/* photos */
+.photo {
+  position: absolute; inset: 0; background: rgba(0, 0, 0, 0.85); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px; z-index: 4;
+}
+.photo img { max-width: 86vw; max-height: 68vh; border: 6px solid #fff; border-radius: 6px; -webkit-touch-callout: default; user-select: auto; }
+.photo .tip { font-size: 15px; opacity: 0.75; }
+.photo-btns { display: flex; gap: 12px; }
+.cam-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none !important; z-index: 6; }
+.cam-flash.go { animation: camflash 0.5s ease-out; }
+@keyframes camflash { from { opacity: 0.9; } to { opacity: 0; } }
+
+/* phones on their side */
+@media (max-height: 560px) {
+  .weapons { grid-template-rows: repeat(5, auto); gap: 4px; }
+  .weapon { width: 118px; height: 48px; gap: 4px; padding: 0 6px; border-radius: 12px; }
+  .weapon .em { font-size: 22px; }
+  .weapon .wn { font-size: 12px; }
+  .weapon .key { display: none; }
+  .name-box .nm { font-size: 22px; }
+  .name-box .fact { font-size: 12px; }
+  .meter { top: calc(max(8px, env(safe-area-inset-top)) + 50px); font-size: 13px; padding: 6px 10px; }
+  .meter { width: 140px; }
+  .meter .bar { height: 12px; }
+  .meter .pct { font-size: 16px; }
+  .corner-btn { padding: 8px 12px; font-size: 16px; }
+  .cam-btn { width: 56px; height: 56px; font-size: 28px; }
+  .hint { font-size: 15px; bottom: 10px; }
+  .done-title { font-size: 26px; }
+  .done-btn { padding: 9px 14px; font-size: 15px; }
+  .pick-head h1 { font-size: 24px; }
+  .back-btn { width: 44px; height: 44px; }
+  .tab { width: 96px; padding: 8px 4px; font-size: 24px; }
+  .tab span { font-size: 12px; }
+  .cards { padding-left: 120px; gap: 10px 14px; }
+  .card { width: 118px; padding: 8px 4px; gap: 6px; }
+  .ball { width: 78px; height: 78px; }
+  .card.giant .ball { width: 96px; height: 96px; }
+  .ring { top: 34px; width: 130px; height: 26px; margin-left: -65px; border-width: 5px; }
+  .card .name { font-size: 14px; }
+  .play-btn { margin-top: 18px; padding: 12px 50px; font-size: 30px; }
+  .sub { font-size: 16px; }
+}
