@@ -11,12 +11,14 @@ pictures, and the sky is the real Milky Way.
    Moon, Mars, Terraformed Mars) and **🔥 Gas Giants & Stars** (Jupiter, Saturn, Uranus, Neptune, the Sun,
    and the Biggest Star).
 3. **Swipe** to spin the planet round, **pick a weapon** on the right, then **tap** the planet where you
-   want it to hit. You can change weapon for every shot.
+   want it to hit. You can change weapon for every shot. Everything fires from where you are: beams come
+   from your cannon, and spaceships, the flying saucer, asteroids and the Moon fly out past you.
+   **Pinch** to zoom in and out (zoom right out to see the whole Biggest Star).
 4. The **❤️ Planet health** bar shows how close it is to blowing up. Gas giants and stars also get more
    fiery and red as they get hurt.
 5. **📸** takes a picture. Press and hold the picture to save it, or tap **Save / Share**.
 
-Keyboard (Mac): arrow keys spin, 1–9 pick a weapon, Space fires at the middle, P takes a picture, Esc
+Keyboard (Mac): arrow keys spin, 1–9 pick a weapon, + / − or the scroll wheel zoom, Space fires at the middle, P takes a picture, Esc
 goes back to the planets.
 
 ## Weapons

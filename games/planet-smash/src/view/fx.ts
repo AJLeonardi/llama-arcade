@@ -116,7 +116,8 @@ export class Fx {
   beam(from: THREE.Vector3, to: () => THREE.Vector3, color: THREE.ColorRepresentation, width: number, secs: number,
     material?: THREE.Material) {
     const group = new THREE.Group();
-    const geo = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true);
+    // thinner at your end: it starts right in front of you, so perspective makes it look even
+    const geo = new THREE.CylinderGeometry(1, 0.3, 1, 12, 1, true);
     geo.translate(0, 0.5, 0);
     geo.rotateX(Math.PI / 2); // along +z, from 0 to 1
     const outer = new THREE.Mesh(geo, material ?? new THREE.MeshBasicMaterial({

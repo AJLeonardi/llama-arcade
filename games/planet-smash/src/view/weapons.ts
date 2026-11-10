@@ -12,8 +12,10 @@ export interface Shot {
   planet: Planet;
   /** Where it hits, in the planet's own space (a point on the ball of radius 1). */
   local: THREE.Vector3;
-  /** Where shots come from (off the right edge of the screen, near the camera). */
+  /** Where beams come from: your cannon, just under the bottom middle of the view (first person). */
   gun: THREE.Vector3;
+  /** Where you are (the camera). Ships, the UFO and thrown things start just behind you and fly away from you. */
+  eye: THREE.Vector3;
   /** The landing. `main` paints the crater (unless blocked) and does the damage when `primary`.
    * Returns false when the shot bounced off (the biggest star without the Rainbow Laser). */
   impact(o: { primary: boolean; local: THREE.Vector3; size: number; style?: CraterStyle; exit?: THREE.Vector3 }): boolean;
@@ -28,6 +30,25 @@ function normalAt(shot: Shot, local: THREE.Vector3): THREE.Vector3 {
 }
 function jitter(local: THREE.Vector3, amount: number): THREE.Vector3 {
   return local.clone().add(new THREE.Vector3().randomDirection().multiplyScalar(amount)).normalize();
+}
+
+/** A point near you: `x` right, `y` up, `z` back (behind you is +z, since you look down -z). */
+function nearYou(shot: Shot, x: number, y: number, z: number): THREE.Vector3 {
+  return shot.eye.clone().add(new THREE.Vector3(x, y, z));
+}
+
+/** A quick glow at the cannon when it fires. */
+function muzzle(fx: Fx, shot: Shot, color: number) {
+  const m = fx.glow(color, 0.9);
+  m.position.copy(shot.gun);
+  const size = shot.gun.distanceTo(shot.eye) * 0.35;
+  fx.run((_, t) => {
+    m.scale.setScalar(size * (1 + t * 3));
+    m.material.opacity = 0.9 * (1 - t / 0.2);
+    if (t < 0.2) return true;
+    fx.remove(m);
+    return false;
+  });
 }
 
 /** Flash, sparks and a boom where something lands. */
@@ -62,6 +83,7 @@ export function fire(fx: Fx, shot: Shot) {
 
 function laser(fx: Fx, shot: Shot, color: number, width: number, secs: number, sound: () => void) {
   sound();
+  muzzle(fx, shot, color);
   fx.beam(shot.gun, () => world(shot, shot.local), color, width, secs);
   fx.after(0.08, () => {
     const ok = shot.impact({ primary: true, local: shot.local, size: shot.weapon.crater });
@@ -75,13 +97,15 @@ function plasma(fx: Fx, shot: Shot) {
   for (let i = 0; i < 3; i++) {
     const target = i === 0 ? shot.local : jitter(shot.local, 0.06);
     fx.after(i * 0.18, () => {
+      muzzle(fx, shot, 0x66aaff);
       const b = fx.glow(0x66aaff);
       const core = fx.glow(0xffffff);
-      b.scale.setScalar(0.35);
-      core.scale.setScalar(0.12);
       fx.run((_, t) => {
         const k = Math.min(1, t / 0.3);
         const p = shot.gun.clone().lerp(world(shot, target, 0.02), k);
+        const near = 0.4 + 0.6 * k; // smaller close to you so it doesn't fill the screen
+        b.scale.setScalar(0.35 * near);
+        core.scale.setScalar(0.12 * near);
         b.position.copy(p);
         core.position.copy(p);
         if (k < 1) return true;
@@ -98,6 +122,7 @@ function plasma(fx: Fx, shot: Shot) {
 
 function rainbow(fx: Fx, shot: Shot) {
   sfx.rainbow();
+  muzzle(fx, shot, 0xffffff);
   const mat = new THREE.ShaderMaterial({
     uniforms: { time: { value: 0 } },
     vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
@@ -126,8 +151,9 @@ function railgun(fx: Fx, shot: Shot) {
   sfx.charge();
   const charge = fx.glow(0x88ddff);
   charge.position.copy(shot.gun);
+  const near = shot.gun.distanceTo(shot.eye);
   fx.run((_, t) => {
-    charge.scale.setScalar(0.05 + t * 1.2);
+    charge.scale.setScalar(near * (0.1 + t * 1.1));
     if (t < 0.45) return true;
     fx.remove(charge);
     return false;
@@ -179,16 +205,18 @@ function ships(fx: Fx, shot: Shot) {
     const ship = shipModel();
     fx.scene.add(ship);
     const side = new THREE.Vector3(ox, oy + 0.15, 0);
-    const start = shot.gun.clone().add(new THREE.Vector3(1.5 + ox, 0.5 + oy, -1));
+    // from just behind you, past your shoulders, out toward the planet
+    const start = nearYou(shot, ox * 0.8 + (ox === 0 ? 0 : Math.sign(ox) * 0.15), -0.35 + oy * 0.5, 0.6 + i * 0.15);
     let fired = 0;
     fx.run((_, t) => {
       const target = world(shot, shot.local);
       const n = normalAt(shot, shot.local);
       const hover = target.clone().addScaledVector(n, 1.1).add(side);
       if (t < 1) {
-        const e = 1 - Math.pow(1 - t, 3);
+        const e = 1 - Math.pow(1 - t, 2);
         ship.position.copy(start).lerp(hover, e);
         ship.lookAt(target);
+        ship.visible = ship.position.z < shot.eye.z - 0.1; // not while it's still behind you
       } else if (t < 2.2) {
         ship.position.copy(hover).add(new THREE.Vector3(0, Math.sin(t * 6 + i) * 0.02, 0));
         ship.lookAt(target);
@@ -208,7 +236,7 @@ function ships(fx: Fx, shot: Shot) {
         }
       } else {
         const k = t - 2.2;
-        ship.position.addScaledVector(new THREE.Vector3(-0.3 + ox, 1, 0.6).normalize(), k * 0.25);
+        ship.position.addScaledVector(new THREE.Vector3(ox * 0.6 + (i % 2 ? 0.3 : -0.3), 1, -0.4).normalize(), k * 0.25);
         if (k > 1.5) { fx.remove(ship); return false; }
       }
       return true;
@@ -241,19 +269,20 @@ function thrown(fx: Fx, shot: Shot, what: 'asteroid' | 'moon') {
     : new THREE.Mesh(rockGeometry(r), new THREE.MeshLambertMaterial({ color: 0x8a7a68, flatShading: true }));
   fx.scene.add(mesh);
   const secs = isMoon ? 1.9 : 1.2;
-  const n0 = normalAt(shot, shot.local);
-  const from = world(shot, shot.local).add(n0.clone().multiplyScalar(2).add(new THREE.Vector3(isMoon ? -3 : 3, 2, 1)).normalize().multiplyScalar(6));
+  // thrown from just below and behind you, so you see it fly away into the planet
+  const from = nearYou(shot, isMoon ? 0 : 0.15, -(r + 0.25), 0.4);
   const spin = new THREE.Vector3().randomDirection();
   sfx.whoosh(secs);
   let trailT = 0;
   fx.run((dt, t) => {
     const k = Math.min(1, t / secs);
-    const e = k * k; // speeding up
+    const e = 1 - Math.pow(1 - k, 1.6); // fast as it leaves you, then smaller and smaller far away
     const target = world(shot, shot.local, r * 0.6);
     mesh.position.copy(from).lerp(target, e);
+    mesh.visible = mesh.position.z < shot.eye.z - r;
     mesh.rotateOnAxis(spin, dt * (isMoon ? 0.8 : 3));
     trailT += dt;
-    if (trailT > 0.025 && k > 0.1) { // a fiery trail as it heats up
+    if (trailT > 0.025 && k > 0.2) { // a fiery trail as it heats up
       trailT = 0;
       const s = fx.glow(isMoon ? 0xffcc88 : 0xff7a22, 0.8);
       s.position.copy(mesh.position);
@@ -296,7 +325,7 @@ function ufoModel(): THREE.Group {
 function ufo(fx: Fx, shot: Shot) {
   const saucer = ufoModel();
   fx.scene.add(saucer);
-  const start = shot.gun.clone().add(new THREE.Vector3(2, 1.2, -1));
+  const start = nearYou(shot, 0.5, 0.45, 0.5); // over your shoulder
   sfx.whoosh(0.9);
   let beamed = false;
   fx.run((_, t) => {
@@ -307,8 +336,9 @@ function ufo(fx: Fx, shot: Shot) {
     saucer.scale.setScalar(0.6);
     saucer.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
     if (t < 0.9) {
-      const e = 1 - Math.pow(1 - t / 0.9, 3);
+      const e = 1 - Math.pow(1 - t / 0.9, 2);
       saucer.position.copy(start).lerp(hover, e);
+      saucer.visible = saucer.position.z < shot.eye.z - 0.15;
     } else if (t < 2.3) {
       saucer.position.copy(hover).addScaledVector(new THREE.Vector3(1, 0, 0), Math.sin(t * 5) * 0.03);
       if (!beamed) {

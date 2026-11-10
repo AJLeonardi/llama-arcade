@@ -109,7 +109,7 @@ const meter = el('div', 'meter', '<div class="label">❤️ Planet health</div><
 const meterFill = meter.querySelector('.fill') as HTMLDivElement;
 const meterPct = meter.querySelector('.pct') as HTMLDivElement;
 const toast = el('div', 'toast hidden');
-const hint = el('div', 'hint', 'Swipe to spin · Tap to fire');
+const hint = el('div', 'hint', 'Swipe to spin · Pinch to zoom · Tap to fire');
 const camBtn = button('cam-btn', '📸', () => takePhoto());
 const weaponsBox = el('div', 'weapons');
 const weaponBtns = new Map<string, HTMLButtonElement>();
@@ -198,6 +198,7 @@ function setBody(b: Body) {
   swallowed = false;
   heatShown = 0;
   zoomOut = 1;
+  userZoom = 1;
   spinVel.set(0, 0);
   pull.position.set(0, 0, 0);
   pull.quaternion.identity();
@@ -218,11 +219,14 @@ function startSmash(b: Body) {
 }
 
 function gunPosition(): THREE.Vector3 {
-  // off the right edge of the screen, a little above, between the camera and the planet
-  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+  // first person: your cannon sits just under the bottom middle of the view, a little in front of you
+  // (never inside the planet, even zoomed right in on the Biggest Star)
   const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
   const d = camera.position.length();
-  return camera.position.clone().multiplyScalar(0.55).addScaledVector(right, d * 0.45).addScaledVector(up, d * 0.18);
+  const ahead = Math.max(0.05, Math.min(0.3 * d, 0.5 * (d - 1)));
+  const below = ahead * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.05;
+  return camera.position.clone().addScaledVector(fwd, ahead).addScaledVector(up, -below);
 }
 
 const raycaster = new THREE.Raycaster();
@@ -251,6 +255,7 @@ function aimAt(local: THREE.Vector3) {
     planet: p,
     local,
     gun: gunPosition(),
+    eye: camera.position.clone(),
     impact: (o) => {
       if (o.primary) inFlight = Math.max(0, inFlight - 1);
       if (ended || p !== planet) return true;
@@ -377,13 +382,32 @@ function savePhoto() {
 // ---------- input: swipe to spin, tap to fire ----------
 const spinVel = new THREE.Vector2();
 let down: { x: number; y: number; t: number; lx: number; ly: number; moved: boolean; id: number } | null = null;
+// two fingers on the screen = pinch to zoom (no spinning or firing while pinching)
+const touches = new Map<number, { x: number; y: number }>();
+let pinch: { gap: number; zoom: number } | null = null;
+function gap() {
+  const [a, b] = [...touches.values()];
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
 canvas.addEventListener('pointerdown', (e) => {
   unlock();
-  if (down) return;
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touches.size === 2) {
+    down = null;
+    spinVel.set(0, 0);
+    pinch = { gap: Math.max(20, gap()), zoom: userZoom };
+    return;
+  }
+  if (down || pinch) return;
   down = { x: e.clientX, y: e.clientY, t: performance.now(), lx: e.clientX, ly: e.clientY, moved: false, id: e.pointerId };
   spinVel.set(0, 0);
 });
 canvas.addEventListener('pointermove', (e) => {
+  if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && touches.size >= 2) {
+    setZoom(pinch.zoom * pinch.gap / Math.max(20, gap()));
+    return;
+  }
   if (!down || e.pointerId !== down.id) return;
   const dx = e.clientX - down.lx, dy = e.clientY - down.ly;
   if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 10) down.moved = true;
@@ -396,6 +420,11 @@ canvas.addEventListener('pointermove', (e) => {
   down.ly = e.clientY;
 });
 function endPointer(e: PointerEvent, cancel: boolean) {
+  touches.delete(e.pointerId);
+  if (pinch) {
+    if (touches.size === 0) pinch = null;
+    return;
+  }
   if (!down || e.pointerId !== down.id) return;
   if (!cancel && !down.moved && performance.now() - down.t < 600) fireAt(e.clientX, e.clientY);
   if (!down.moved) spinVel.set(0, 0);
@@ -403,6 +432,27 @@ function endPointer(e: PointerEvent, cancel: boolean) {
 }
 canvas.addEventListener('pointerup', (e) => endPointer(e, false));
 canvas.addEventListener('pointercancel', (e) => endPointer(e, true));
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  setZoom(userZoom * Math.exp(e.deltaY * 0.002));
+}, { passive: false });
+// Safari on the Mac sends trackpad pinches as gesture events
+canvas.addEventListener('gesturestart', (e) => { e.preventDefault(); pinch ??= { gap: 1, zoom: userZoom }; });
+canvas.addEventListener('gesturechange', (e) => {
+  e.preventDefault();
+  const scale = (e as unknown as { scale: number }).scale;
+  if (pinch && touches.size < 2) setZoom(pinch.zoom / Math.max(0.1, scale));
+});
+canvas.addEventListener('gestureend', (e) => { e.preventDefault(); if (touches.size === 0) pinch = null; });
+
+/** How far the player has zoomed: 1 = normal, bigger = further away. The most it goes out shows the whole
+ * planet with room to spare (for the Biggest Star that's well past the normal view). */
+let userZoom = 1;
+let maxZoom = 2;
+let minZoom = 0.75;
+function setZoom(z: number) {
+  userZoom = THREE.MathUtils.clamp(z, minZoom, maxZoom);
+}
 
 const qTmp = new THREE.Quaternion();
 function spin(ax: number, ay: number) {
@@ -426,6 +476,8 @@ window.addEventListener('keydown', (e) => {
       e.preventDefault();
     }
     if (e.code === 'KeyP') takePhoto();
+    if (e.key === '-' || e.key === '_') setZoom(userZoom * 1.15);
+    if (e.key === '=' || e.key === '+') setZoom(userZoom / 1.15);
     if (e.code === 'Escape') show('pick');
   } else if (mode === 'title' && (e.code === 'Space' || e.code === 'Enter')) show('pick');
 });
@@ -443,7 +495,14 @@ function fit() {
   const availW = w - panel;
   const big = body.kind === 'giant';
   const radPx = big ? 0.62 * Math.max(availW, h) : 0.36 * Math.min(availW, h);
-  baseDist = h / 2 / (radPx * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+  const tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  baseDist = h / 2 / (radPx * tanHalf);
+  // zoomed all the way out, the whole ball fits in the free space with some room round it
+  const wholeDist = h / 2 / (0.3 * Math.min(availW, h) * tanHalf);
+  maxZoom = Math.max(2, wholeDist / baseDist);
+  minZoom = big ? 1 : 0.75; // the Biggest Star is already bigger than the screen
+  if (userZoom < minZoom) userZoom = minZoom;
+  if (userZoom > maxZoom) userZoom = maxZoom;
   if (panel) camera.setViewOffset(w, h, panel / 2, 0, w, h);
   else camera.clearViewOffset();
   camera.updateProjectionMatrix();
@@ -491,7 +550,8 @@ function frame(now: number) {
     if (toastTimer <= 0) toast.classList.add('hidden');
   }
 
-  dist += (baseDist * zoomOut - dist) * Math.min(1, dt * (zoomOut > 1 ? 0.8 : 6));
+  // zoomOut is the game pulling back for an ending; userZoom is the player's pinch
+  dist += (baseDist * userZoom * zoomOut - dist) * Math.min(1, dt * (zoomOut > 1 ? 0.8 : 8));
   const shake = fx ? fx.shake : 0;
   camera.position.set(
     (Math.random() - 0.5) * shake * 0.04 * dist,
