@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1f5fbf"/>
+      <stop offset="1" stop-color="#0d2340"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <rect y="340" width="512" height="172" fill="#2e9e44"/>
+  <rect y="340" width="512" height="10" fill="#fff" opacity=".85"/>
+  <text x="200" y="330" font-size="250" text-anchor="middle" font-family="Apple Color Emoji, Noto Color Emoji, sans-serif">🦙</text>
+  <text x="375" y="440" font-size="150" text-anchor="middle" font-family="Apple Color Emoji, Noto Color Emoji, sans-serif">⚽</text>
+  <path d="M60 470 Q 200 380 330 410" stroke="#ffe066" stroke-width="14" fill="none" stroke-linecap="round" stroke-dasharray="4 26"/>
+</svg>
