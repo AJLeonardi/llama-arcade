@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5ec8ff"/>
+      <stop offset="1" stop-color="#2f9e44"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <!-- roller coaster with a loop -->
+  <path d="M-10 420 C 60 420, 80 200, 150 200 C 210 200, 210 400, 290 400 C 330 400, 360 380, 380 330
+           C 400 270, 330 250, 330 300 C 330 350, 420 400, 522 380"
+        fill="none" stroke="#fa5252" stroke-width="22" stroke-linecap="round"/>
+  <g stroke="#fff" stroke-width="8">
+    <line x1="60" y1="380" x2="60" y2="512"/><line x1="150" y1="210" x2="150" y2="512"/>
+    <line x1="230" y1="330" x2="230" y2="512"/><line x1="460" y1="390" x2="460" y2="512"/>
+  </g>
+  <!-- big gold coin -->
+  <circle cx="256" cy="200" r="130" fill="#fcc419" stroke="#e67700" stroke-width="16"/>
+  <text x="256" y="268" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="200" text-anchor="middle" fill="#2b8a3e">$</text>
+</svg>

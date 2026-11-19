@@ -1,0 +1,89 @@
+html, body { margin: 0; height: 100%; background: #173b22; overflow: hidden; touch-action: none;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  font-family: ui-rounded, 'SF Pro Rounded', system-ui, sans-serif; color: #fff; }
+canvas#game { display: block; width: 100vw; height: 100vh; }
+button { font: inherit; color: inherit; border: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.hidden { display: none !important; }
+
+.money { position: fixed; left: max(14px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top));
+  background: #2f9e44; border: 4px solid #ffd43b; border-radius: 20px; padding: 6px 18px; font-size: 32px; font-weight: 900;
+  box-shadow: 0 4px 0 #1b5e2a; transition: transform 0.15s; text-shadow: 0 2px 0 #1b5e2a; }
+.money.bump { transform: scale(1.15); }
+.gain { position: fixed; left: max(30px, env(safe-area-inset-left)); top: 74px; font-size: 26px; font-weight: 900; color: #ffd43b;
+  text-shadow: 0 2px 3px #000; pointer-events: none; animation: rise 1.2s ease-out forwards; }
+@keyframes rise { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-50px); } }
+
+.top-btns { position: fixed; right: max(12px, env(safe-area-inset-right)); top: max(10px, env(safe-area-inset-top)); display: flex; gap: 10px; }
+.big-btn { background: #fab005; color: #3b2a00; font-size: 24px; font-weight: 900; padding: 10px 18px; border-radius: 18px;
+  box-shadow: 0 5px 0 #b07800; }
+.big-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #b07800; }
+.big-btn.green { background: #40c057; color: #fff; box-shadow: 0 5px 0 #237a34; }
+.big-btn.red { background: #fa5252; color: #fff; box-shadow: 0 5px 0 #a51d1d; }
+.big-btn.blue { background: #339af0; color: #fff; box-shadow: 0 5px 0 #1864ab; }
+.big-btn.purple { background: #845ef7; color: #fff; box-shadow: 0 5px 0 #5235ab; }
+.big-btn.grey { background: #868e96; color: #fff; box-shadow: 0 5px 0 #495057; }
+.big-btn:disabled { opacity: 0.45; }
+.icon-btn { width: 60px; height: 60px; border-radius: 18px; font-size: 30px; background: rgba(0,0,0,0.4); }
+
+.jump { position: fixed; right: max(24px, env(safe-area-inset-right)); bottom: max(24px, env(safe-area-inset-bottom));
+  width: 84px; height: 84px; border-radius: 50%; background: rgba(255,255,255,0.25); border: 3px solid rgba(255,255,255,0.5); font-size: 36px; }
+
+.panel { position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  background: rgba(20, 30, 40, 0.82); border-radius: 22px; padding: 10px 14px; text-align: center; max-width: 80vw; }
+.panel .name { font-size: 24px; font-weight: 900; }
+.panel .info { font-size: 16px; opacity: 0.85; margin: 2px 0 8px; }
+.panel .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.panel .bar { height: 12px; background: #343a40; border-radius: 6px; overflow: hidden; margin: 6px 0; }
+.panel .bar div { height: 100%; background: #40c057; width: 0; }
+
+.toast { position: fixed; left: 50%; top: 90px; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 10px 20px;
+  border-radius: 16px; font-size: 22px; font-weight: 800; pointer-events: none; white-space: nowrap; }
+
+.screen { position: fixed; inset: 0; background: rgba(10, 30, 15, 0.85); display: flex; flex-direction: column; align-items: center;
+  overflow-y: auto; padding: max(16px, env(safe-area-inset-top)) 16px 20px; box-sizing: border-box; touch-action: pan-y; }
+.screen h1 { font-size: 64px; margin: 20px 0 4px; color: #ffd43b; text-shadow: 0 5px 0 #2f9e44; text-align: center; }
+.screen h2 { font-size: 34px; margin: 6px 0 12px; }
+.screen p { font-size: 20px; max-width: 640px; text-align: center; margin: 6px 0 16px; }
+.screen .row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin: 8px 0; }
+.title { background: linear-gradient(#5ec8ff, #1e7b3c); justify-content: center; }
+.build-no { position: fixed; right: 8px; bottom: 4px; font-size: 11px; opacity: 0.5; pointer-events: none; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; width: 100%; max-width: 980px; }
+.card { background: #fff; color: #222; border-radius: 18px; padding: 10px 8px; text-align: center; box-shadow: 0 5px 0 #adb5bd; }
+.card .e { font-size: 44px; line-height: 1.1; }
+.card .n { font-size: 17px; font-weight: 800; margin: 4px 0; min-height: 2.4em; display: flex; align-items: center; justify-content: center; }
+.card .p { font-size: 20px; font-weight: 900; color: #2b8a3e; }
+.card .t { font-size: 13px; color: #868e96; }
+.card.locked { opacity: 0.5; }
+.card.locked .p { color: #e03131; }
+.close { position: sticky; top: 0; align-self: flex-end; z-index: 2; }
+
+.hire { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+.hire .card { width: 220px; }
+
+.stick-base { position: fixed; left: -60px; top: -60px; width: 120px; height: 120px; border-radius: 50%;
+  background: rgba(255,255,255,0.12); border: 2px solid rgba(255,255,255,0.35); pointer-events: none; opacity: 0; }
+.stick-base.on { opacity: 1; }
+.stick-knob { position: absolute; left: 30px; top: 30px; width: 60px; height: 60px; border-radius: 50%; background: rgba(255,255,255,0.55); }
+
+.update { position: fixed; left: 50%; top: max(10px, env(safe-area-inset-top)); transform: translateX(-50%); background: #ffd43b;
+  color: #3b2a00; font-weight: 900; font-size: 18px; padding: 8px 16px; border-radius: 14px; z-index: 50; }
+
+.crosshair { position: fixed; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.7); pointer-events: none; }
+
+@media (max-height: 500px) {
+  .money { font-size: 22px; padding: 4px 12px; border-width: 3px; }
+  .big-btn { font-size: 18px; padding: 7px 12px; }
+  .icon-btn { width: 46px; height: 46px; font-size: 24px; }
+  .jump { width: 64px; height: 64px; font-size: 28px; }
+  .panel .name { font-size: 18px; }
+  .panel .info { font-size: 13px; margin-bottom: 4px; }
+  .screen h1 { font-size: 40px; margin-top: 4px; }
+  .screen h2 { font-size: 24px; }
+  .screen p { font-size: 16px; }
+  .cards { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  .card .e { font-size: 32px; }
+  .card .n { font-size: 14px; }
+  .toast { top: 56px; font-size: 17px; }
+}
