@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GAINS, makeLevel, wallNeed } from '../src/sim/levels';
 import { nice, short } from '../src/sim/numbers';
 import { MAX_GAP, Sim, TOP_RUN, WALK, runSpeed, type Input, type SimEvent } from '../src/sim/physics';
-import type { Block, Kind, Level } from '../src/sim/types';
+import type { Block, Kind, Level, V3 } from '../src/sim/types';
 
 const NONE: Input = { moveX: 0, moveZ: 0, jump: false };
 const NORTH: Input = { moveX: 0, moveZ: 1, jump: false };
@@ -281,5 +281,42 @@ describe('levels', () => {
     expect(sim.pos[2]).toBeGreaterThan(70);
     expect(sim.pos[2]).toBeLessThan(80);
     expect(sim.speed).toBeGreaterThanOrEqual(9);
+  });
+});
+
+describe('walls and rails', () => {
+  it('no block has a negative size (that made the left-side walls see-through to the runner)', () => {
+    for (const n of [1, 2, 7]) {
+      for (const b of [...makeLevel(n).blocks, ...makeLevel(n, false).blocks]) {
+        expect(b.w).toBeGreaterThanOrEqual(0);
+        expect(b.h).toBeGreaterThanOrEqual(0);
+        expect(b.d).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  it('every gym wall stops you, on both sides, slow or fast', () => {
+    const L = makeLevel(1);
+    const wall = L.blocks.find((b) => b.kind === 'wall')!;
+    const gym2 = wall.z - 4.5 - 29; // the big-treadmill gym, just before the wall's road
+    for (const z0 of [5, gym2]) {
+      for (const side of [-1, 1]) {
+        for (const speed of [1, 1e4]) {
+          // [start, direction, how far you may get]
+          const tries: [V3, [number, number], (s: Sim) => boolean][] = [
+            [[side * 10, 0, z0 + 5], [side, 0], (s) => Math.abs(s.pos[0]) < 16.5], // side wall
+            [[side * 10, 0, z0 + 5], [0, -1], (s) => s.pos[2] > z0], // back wall
+            [[side * 10, 0, z0 + 25], [0, 1], (s) => s.pos[2] < z0 + 29], // front wall
+          ];
+          for (const [start, [dx, dz], ok] of tries) {
+            const s = new Sim(L);
+            s.speed = speed;
+            s.pos = [...start];
+            run(s, 180, { moveX: dx, moveZ: dz, jump: false });
+            expect(ok(s) && !s.broken, `gym at ${z0}, side ${side}, speed ${speed}, going ${dx},${dz}: ended at ${s.pos.map((v) => v.toFixed(1))}`).toBe(true);
+          }
+        }
+      }
+    }
   });
 });

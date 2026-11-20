@@ -38,9 +38,13 @@ class Build {
   constructor(num: number, spawn: V3, sky: string) {
     this.level = { num, spawn, spawnYaw: 0, blocks: this.blocks, signs: [], finishZ: 0, fallY: -12, sky };
   }
-  /** A box by its corners (x0..x1, y0..y1, z0..z1). */
+  /** A box by its corners (x0..x1, y0..y1, z0..z1), in either order (a size is never negative). */
   span(x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, kind: Kind, color: string, more: Partial<Block> = {}) {
-    const b: Block = { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z: (z0 + z1) / 2, w: x1 - x0, h: y1 - y0, d: z1 - z0, kind, color, ...more };
+    const b: Block = {
+      x: (x0 + x1) / 2, y: (y0 + y1) / 2, z: (z0 + z1) / 2,
+      w: Math.abs(x1 - x0), h: Math.abs(y1 - y0), d: Math.abs(z1 - z0),
+      kind, color, ...more,
+    };
     this.blocks.push(b);
     return this.blocks.length - 1;
   }
