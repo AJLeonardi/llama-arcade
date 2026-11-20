@@ -1,9 +1,22 @@
-// The levels: every one is a long straight road along +z, and they never run out. Each starts in a gym with the
-// small free treadmills, then long keyboard stretches with one thing between each: goo to jump, a gym with the
+// The levels: every one is a long, wide straight road along +z, and they never run out. Each starts in a gym with
+// the small free treadmills, then long keyboard stretches with obstacles (crates, rolling boulders, sliding goo)
+// and one thing between each: goo to jump, a gym with the
 // big treadmills right before the speed wall (you need enough speed to smash it), a jump pad, and the finish
 // line. Rails on both sides. Centred on x = 0.
 import { nice, short } from './numbers';
 import type { Block, Kind, Level, V3 } from './types';
+
+/** A seeded random number maker (0..1), so a level is laid out the same every time. */
+function rng(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 export const PURPLE = '#9775fa';
 export const CYAN = '#22b8cf';
@@ -29,14 +42,14 @@ export function wallNeed(num: number) {
 const GYM = 29;
 
 /** The road is this wide (x from -ROAD to ROAD). */
-export const ROAD = 5;
+export const ROAD = 9;
 
 class Build {
   blocks: Block[] = [];
   keys: string[] | undefined;
   level: Level;
   constructor(num: number, spawn: V3, sky: string) {
-    this.level = { num, spawn, spawnYaw: 0, blocks: this.blocks, signs: [], finishZ: 0, fallY: -12, sky };
+    this.level = { num, spawn, spawnYaw: 0, blocks: this.blocks, signs: [], boulders: [], finishZ: 0, fallY: -12, sky };
   }
   /** A box by its corners (x0..x1, y0..y1, z0..z1), in either order (a size is never negative). */
   span(x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, kind: Kind, color: string, more: Partial<Block> = {}) {
@@ -87,11 +100,12 @@ export function makeLevel(num: number, first = true): Level {
    * further out) and walls all round, open only where the road goes in and out.
    */
   const gym = (z0: number, gains: number[]) => {
-    const z1 = z0 + GYM, half = 8 + (gains.length / 2) * 4.2;
+    const out = ROAD + 3; // the first treadmill, clear of the road through the middle
+    const z1 = z0 + GYM, half = out + (gains.length / 2) * 4.2;
     B.floor(-half, half, z0, z1);
     gains.forEach((gain, i) => {
       const side = i < gains.length / 2 ? 1 : -1;
-      const x = side * (8 + (i % (gains.length / 2)) * 4.2);
+      const x = side * (out + (i % (gains.length / 2)) * 4.2);
       const c = MILL_COLORS[GAINS.indexOf(gain)];
       B.span(x - 1.6, x + 1.6, 0, 0.4, z0 + 7, z0 + 21, 'treadmill', c, { push: [0, -5], gain });
       B.span(x - 1.6, x + 1.6, 0, 1.4, z0 + 21, z0 + 22, 'solid', '#5c5f6e'); // the front, with the screen
@@ -112,10 +126,51 @@ export function makeLevel(num: number, first = true): Level {
   let z = gym(5, GAINS.slice(0, 4));
   B.sign(0, 7, z, 'FREE TREADMILLS', 1.3, { colors: [YELLOW] });
 
-  // The road: long keyboard stretches (more keys, more speed, more time) with one thing to do between each.
+  // Obstacles, placed at random but the same every time for a level. Each stretch keeps 15 clear at both ends.
+  const rand = rng(num * 7919 + 13);
+  const lane = (margin: number) => -ROAD + margin + rand() * (2 * (ROAD - margin));
+  /** Crates in rows: jump over them or run round. They just stop you. */
+  const crates = (z0: number, z1: number, rows: number) => {
+    for (let r = 0; r < rows; r++) {
+      const cz = z0 + ((r + 1) * (z1 - z0)) / (rows + 1);
+      const xs: number[] = [];
+      for (let k = 0; k < 2 + (rand() < 0.5 ? 1 : 0); k++) {
+        const x = lane(1.2);
+        if (xs.every((o) => Math.abs(o - x) > 3)) xs.push(x);
+      }
+      for (const x of xs) B.span(x - 0.9, x + 0.9, 0, 1.1, cz - 0.9, cz + 0.9, 'solid', '#b7793f', { crate: true });
+    }
+  };
+  /** Boulders rolling down the road at you, each in its own lane. Dodge them! */
+  const boulders = (z0: number, z1: number, n: number) => {
+    for (let k = 0; k < n; k++) {
+      const speed = 9 + d * 1.5, wait = 1 + rand() * 2;
+      const roll = (z1 - z0) / speed;
+      B.level.boulders.push({ x: -ROAD + 1.6 + ((k + rand() * 0.6) * (2 * ROAD - 3.2)) / n, z0: z1, z1: z0, r: 1.4, speed, wait, phase: rand() * (roll + wait) });
+    }
+  };
+  /** Goo blocks sliding side to side across the road. Wait for a gap, or jump them. */
+  const sliders = (z0: number, z1: number, n: number) => {
+    for (let k = 0; k < n; k++) {
+      const sz = z0 + ((k + 1) * (z1 - z0)) / (n + 1);
+      B.span(-1, 1, 0, 1, sz - 1, sz + 1, 'goo', GOO, { slide: { dx: 2 * ROAD - 3, period: 3 + rand() * 2, phase: rand() } });
+    }
+  };
+  const few = 2 + Math.min(d, 4); // how many of each thing: 2 on level 1, up to 6
+  const things = [
+    (a: number, b: number) => crates(a, b, few),
+    (a: number, b: number) => boulders(a, b, few),
+    (a: number, b: number) => sliders(a, b, few),
+    (a: number, b: number) => (crates(a, (a + b) / 2, Math.ceil(few / 2)), boulders((a + b) / 2, b, Math.ceil(few / 2))),
+  ];
+  let next = 0;
+
+  // The road: long keyboard stretches (more keys, more speed, more time), each with obstacles in the middle and
+  // one thing to do between them.
   const stretch = 60 + 10 * d;
   const run = (len = stretch) => {
     road(z, z + len);
+    things[next++ % things.length](z + 15, z + len - 15);
     z += len;
   };
   // 1. Goo to jump over: one on level 1, two after that. Low, with lots of road before it.

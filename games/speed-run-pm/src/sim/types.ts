@@ -31,10 +31,27 @@ export interface Block {
   keyboard?: string[];
   /** Drawn as a black-and-white finish line. */
   finish?: boolean;
+  /** Slides side to side: x goes from x - dx/2 to x + dx/2 and back every `period` seconds. Only for goo. */
+  slide?: { dx: number; period: number; phase: number };
+  /** A crate (drawn as one). */
+  crate?: boolean;
   /** Touched but not drawn (it's already drawn by the level before). */
   hidden?: boolean;
   /** Just for looks: drawn but never touched. */
   deco?: boolean;
+}
+
+/** A big boulder rolling down the road at you (along -z) from `z0` to `z1`, again and again. */
+export interface Boulder {
+  x: number;
+  z0: number;
+  z1: number;
+  r: number;
+  speed: number;
+  /** Seconds between one roll and the next. */
+  wait: number;
+  /** Seconds into its first roll at the start. */
+  phase: number;
 }
 
 export interface Sign {
@@ -56,6 +73,7 @@ export interface Level {
   spawnYaw: number;
   blocks: Block[];
   signs: Sign[];
+  boulders: Boulder[];
   /** Crossing this line (z) finishes the level. */
   finishZ: number;
   /** Falling below this breaks you into pieces. */

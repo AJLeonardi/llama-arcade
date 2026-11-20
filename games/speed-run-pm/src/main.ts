@@ -196,6 +196,7 @@ function goTo(num: number) {
 
 const OUCH: Record<string, string> = {
   goo: 'Splat in the goo! 🟢',
+  boulder: 'Bonk! A boulder! 🪨',
   fall: 'Whoooa! 🙃',
 };
 
@@ -343,6 +344,8 @@ function frame(now: number) {
   );
 
   rig.root.position.copy(playerAt);
+  // Blink while safe, just after coming back.
+  if (!brokenUntil) rig.root.visible = sim.safe <= 0 || Math.floor(clock * 10) % 2 === 0;
   rig.root.rotation.set(0, sim.yaw, 0);
   animate(rig, clock, speed, !sim.onGround);
   view?.update(sim, clock, dt);

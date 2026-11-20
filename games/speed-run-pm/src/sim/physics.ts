@@ -1,7 +1,7 @@
 // The runner on a straight road of boxes. Speed has no top: treadmills and keyboard keys keep making it bigger,
 // all the way to infinity. Pure maths, no three.js: tested in tests/game.test.ts.
 // The running and jumping started as a copy of Speed Run AM's physics (games/speed-run-am/src/sim/physics.ts).
-import type { Block, Level, V3 } from './types';
+import type { Block, Boulder, Level, V3 } from './types';
 
 export const STEP = 1 / 60; // fixed physics step (s)
 export const HALF_W = 0.45; // player box half-width (x and z)
@@ -20,6 +20,8 @@ const TREADMILL_GROW = 0.03; // past speed 33, a ×1 treadmill adds this much of
 /** Running at least this fast (units/s), you skim right over goo, like running on water. */
 export const GOO_SKIM = 25;
 const MAX_MOVE = 0.4; // fast moves are cut into pieces this long, so you can't skip through a wall
+/** After coming back, boulders and sliding goo can't get you for this long (s). */
+export const SAFE_TIME = 1.5;
 const BACK_UP = 3; // after a splat you come back this far behind where you last stood on plain floor
 const ROAD_SAFE = 3.5; // ...and at most this far from the middle of the road
 const COYOTE = 0.2; // can still jump this long after running off an edge (s)
@@ -44,7 +46,20 @@ export function treadmillRate(gain: number, speed: number) {
   return gain * Math.max(1, speed * TREADMILL_GROW);
 }
 
-export type Ouch = 'goo' | 'fall';
+export type Ouch = 'goo' | 'fall' | 'boulder';
+
+/** Where a boulder is at time t (its centre z), or null between rolls. */
+export function boulderZ(b: Boulder, t: number): number | null {
+  const roll = (b.z0 - b.z1) / b.speed;
+  const s = (((t + b.phase) % (roll + b.wait)) + roll + b.wait) % (roll + b.wait);
+  return s < roll ? b.z0 - s * b.speed : null;
+}
+
+/** Where a sliding block's middle is (x) at time t. */
+export function slideX(b: Block, t: number) {
+  if (!b.slide) return b.x;
+  return b.x + (b.slide.dx / 2) * Math.sin(Math.PI * 2 * (t / b.slide.period + b.slide.phase));
+}
 
 export type SimEvent =
   | { type: 'jump' }
@@ -81,6 +96,8 @@ export class Sim {
   speed = 1;
   /** Speed walls you've smashed (block indexes). */
   readonly smashed = new Set<number>();
+  /** Seconds left of being safe from boulders and sliding goo, just after coming back. */
+  safe = 0;
   /** Broken into pieces, waiting for `respawn()`. */
   broken = false;
   finished = false;
@@ -106,6 +123,7 @@ export class Sim {
     this.onGround = false;
     this.ground = -1;
     this.broken = false;
+    this.safe = SAFE_TIME;
   }
 
   private breakUp(why: Ouch, ev: SimEvent[]) {
@@ -129,6 +147,7 @@ export class Sim {
     const L = this.level;
     this.t += dt;
     if (this.broken || this.finished) return ev;
+    this.safe = Math.max(0, this.safe - dt);
 
     // 1. Running: ease towards the wanted speed (quick on the ground, slower in the air). Sideways is capped.
     const len = Math.hypot(input.moveX, input.moveZ);
@@ -226,8 +245,9 @@ export class Sim {
     // Bumped a speed wall you were too slow for? Say so again next time you bump it.
     if (this.slowWall >= 0 && !this.overlaps(this.slowWall, 0.3)) this.slowWall = -1;
 
-    // 6. Falling off the road.
+    // 6. Falling off the road, or a boulder.
     if (this.pos[1] < L.fallY) this.breakUp('fall', ev);
+    else if (!this.safe && this.hitBoulder()) this.breakUp('boulder', ev);
     return ev;
   }
 
@@ -242,17 +262,32 @@ export class Sim {
   private overlaps(i: number, grow = 0, pos: V3 = this.pos) {
     const b = this.level.blocks[i];
     return (
-      Math.abs(pos[0] - b.x) < HALF_W + b.w / 2 + grow &&
+      Math.abs(pos[0] - (b.slide ? slideX(b, this.t) : b.x)) < HALF_W + b.w / 2 + grow &&
       Math.abs(pos[2] - b.z) < HALF_W + b.d / 2 + grow &&
       pos[1] - grow < b.y + b.h / 2 &&
       pos[1] + HEIGHT + grow > b.y - b.h / 2
     );
   }
 
-  /** Does block i stop you (and the camera)? */
+  /** Does block i stop you (and the camera)? Sliding goo doesn't: it only splats you (or you skim through). */
   solidAt(i: number) {
     const b = this.level.blocks[i];
-    return !b.deco && !this.smashed.has(i);
+    return !b.deco && !b.slide && !this.smashed.has(i);
+  }
+
+  /** Is a rolling boulder touching you? */
+  private hitBoulder() {
+    for (const b of this.level.boulders) {
+      const z = boulderZ(b, this.t);
+      if (z === null) continue;
+      const cy = b.r;
+      // The closest point of your box to the ball's middle.
+      const nx = Math.max(this.pos[0] - HALF_W, Math.min(this.pos[0] + HALF_W, b.x));
+      const ny = Math.max(this.pos[1], Math.min(this.pos[1] + HEIGHT, cy));
+      const nz = Math.max(this.pos[2] - HALF_W, Math.min(this.pos[2] + HALF_W, z));
+      if (Math.hypot(nx - b.x, ny - cy, nz - z) < b.r * 0.9) return true;
+    }
+    return false;
   }
 
   /** Is there plain floor under (x, z), with its top at your feet? */
@@ -264,7 +299,7 @@ export class Sim {
   }
 
   private touchingGoo() {
-    return this.level.blocks.some((b, i) => b.kind === 'goo' && this.overlaps(i, 0.06));
+    return this.level.blocks.some((b, i) => b.kind === 'goo' && !(b.slide && this.safe) && this.overlaps(i, 0.06));
   }
 
   private moveY(dy: number) {

@@ -14,8 +14,12 @@ cape, no restarting, no ads.
     and the big ones (×10, ×20, ×50, ×100) right in front of the speed wall. They're all free. The further
     out, the faster.
   - Your speed is never lost: not when you fall, not between levels, not the next day.
-- Each level is a long keyboard road with rails on both sides (you can't fall off), and one thing between each
-  long stretch:
+- Each level is a long, wide keyboard road with rails on both sides (you can't fall off). Every long stretch
+  has obstacles in the middle, and more of them on later levels:
+  - **Crates**: jump over them or run round. They just stop you.
+  - **Boulders** rolling down the road at you. Dodge them!
+  - **Sliding goo** going side to side. Wait for a gap, or jump it (or skim through when you're super fast).
+- Between the stretches:
   1. **Goo**: one on level 1, two after that. Jump over it. If you're super fast you skim right over it
      ("Too fast for the goo!").
   2. **The speed wall**: it shows the speed you need (10, 30, 100, 330, 1K, 3.3K...). Fast enough and you
@@ -23,8 +27,9 @@ cape, no restarting, no ads.
   3. **A jump pad**: it bounces you up high, just for fun.
   4. **The finish line** and the cup. Then you just keep running: the road goes straight on into the next
      level. Levels get a bit longer each time.
-- Splat in the goo and you come back just behind it, with all your speed. Nothing ever sends you back to
-  the start.
+- Splat in the goo or get bonked by a boulder and you come back just behind it, with all your speed, and
+  you blink for a moment: boulders and sliding goo can't get you while you blink. Nothing ever sends you back
+  to the start.
 - The levels never run out. Speeds get short names: K (thousand), M (million), B (billion), T (trillion),
   and then up to ∞ if you keep going.
 

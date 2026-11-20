@@ -62,6 +62,39 @@ export const keyTopsTex = (colors: string[], keySize: number) =>
     return t;
   });
 
+/** A rolling boulder: grey stone with darker and lighter spots and a stripe, so you can see it roll. */
+export const boulderTex = () =>
+  once('boulder', () =>
+    canvasTexture(128, (g, s) => {
+      g.fillStyle = '#8d8478';
+      g.fillRect(0, 0, s, s);
+      let seed = 11;
+      const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      for (let i = 0; i < 40; i++) {
+        g.fillStyle = i % 2 ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.12)';
+        g.beginPath();
+        g.arc(rnd() * s, rnd() * s, 3 + rnd() * 10, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.fillStyle = 'rgba(0,0,0,0.25)';
+      g.fillRect(0, s * 0.45, s, s * 0.1);
+    }),
+  );
+
+/** Crate wood: planks with dark gaps (blocks have one texture tile per world unit). */
+export const crateTex = () =>
+  once('crate', () =>
+    canvasTexture(64, (g, s) => {
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, s, s);
+      g.fillStyle = 'rgba(80,40,10,0.45)';
+      g.fillRect(0, 0, s, 4);
+      g.fillRect(0, s / 2 - 2, s, 4);
+      g.fillStyle = 'rgba(80,40,10,0.15)';
+      for (let i = 0; i < 6; i++) g.fillRect(0, 8 + i * 9, s, 1);
+    }),
+  );
+
 /** Big letters for signs, each letter taking its turn in `colors` (pink, brown, pink, brown...). */
 export function lettersTex(text: string, colors: string[]) {
   const c = document.createElement('canvas');
